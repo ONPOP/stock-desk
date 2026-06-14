@@ -32,3 +32,25 @@ export const watchlistAddSchema = z.object({
   market: marketSchema,
   group_name: z.string().trim().max(30, '그룹명이 너무 깁니다.').optional(),
 });
+
+// 워치리스트 PATCH — 즐겨찾기 토글 또는 그룹 내 순서 재정렬(둘 중 하나).
+const stockIdSchema = z.string().uuid('stock_id 형식이 올바르지 않습니다.');
+
+export const watchlistFavoriteSchema = z.object({
+  action: z.literal('favorite'),
+  stock_id: stockIdSchema,
+  value: z.boolean(),
+});
+
+export const watchlistReorderSchema = z.object({
+  action: z.literal('reorder'),
+  orders: z
+    .array(z.object({ stock_id: stockIdSchema, sort_order: z.number().int().min(0).max(9999) }))
+    .min(1, '정렬 대상이 없습니다.')
+    .max(100, '정렬 대상이 너무 많습니다.'),
+});
+
+export const watchlistPatchSchema = z.discriminatedUnion('action', [
+  watchlistFavoriteSchema,
+  watchlistReorderSchema,
+]);

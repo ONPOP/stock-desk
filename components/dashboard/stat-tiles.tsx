@@ -1,14 +1,16 @@
-// 대시보드 4칸 KPI 타일 (B 트레이더 콕핏) — 관심종목·신규분석·오늘일정 카운트 + KOSPI.
-// 서버 컴포넌트(집계는 서버 데이터). KOSPI만 시세 의존이라 클라이언트 자식.
+// 대시보드 4칸 KPI 타일 (B 트레이더 콕핏) — 관심종목·신규분석·오늘일정 카운트 + 포트폴리오.
+// 서버 컴포넌트(집계는 서버 데이터). 포트폴리오 평가금액만 시세 의존이라 클라이언트 자식.
 import type { ReactNode } from 'react';
 import { Star, Sparkles, CalendarDays } from 'lucide-react';
-import { MarketKpiTile } from './market-kpi-tile';
-import type { CalendarEvent, RecentAnalysis } from '@/types';
+import { PortfolioKpiTile } from './portfolio-kpi-tile';
+import { computeHoldings, computeRealized } from '@/lib/utils/portfolio';
+import type { CalendarEvent, RealTrade, RecentAnalysis } from '@/types';
 
 interface StatTilesProps {
   watchCount: number;
   analyses: RecentAnalysis[];
   events: CalendarEvent[];
+  trades: RealTrade[];
 }
 
 function Tile({ icon, label, num, sub }: { icon: ReactNode; label: string; num: ReactNode; sub: string }) {
@@ -24,12 +26,14 @@ function Tile({ icon, label, num, sub }: { icon: ReactNode; label: string; num: 
   );
 }
 
-export function StatTiles({ watchCount, analyses, events }: StatTilesProps) {
+export function StatTiles({ watchCount, analyses, events, trades }: StatTilesProps) {
   const buy = analyses.filter((a) => a.position === 'buy').length;
   const neutral = analyses.filter((a) => a.position === 'neutral').length;
   const sell = analyses.filter((a) => a.position === 'sell').length;
   const confirmed = events.filter((e) => e.confirmed).length;
   const planned = events.length - confirmed;
+  const holdings = computeHoldings(trades);
+  const realized = computeRealized(trades);
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -46,7 +50,7 @@ export function StatTiles({ watchCount, analyses, events }: StatTilesProps) {
         num={events.length}
         sub={`확정 ${confirmed} · 예정 ${planned}`}
       />
-      <MarketKpiTile />
+      <PortfolioKpiTile holdings={holdings} realized={realized} />
     </div>
   );
 }

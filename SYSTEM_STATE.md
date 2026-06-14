@@ -2,45 +2,50 @@
 
 > 다음 세션 시작 시 본 파일을 첨부. 상세 이력은 `task-history.md`, 기준 문서는 `docs/PRD.md`.
 
-## 현재 상태 (2026-06-14)
+## 현재 상태 (2026-06-15)
 
-- **진행도**: W1~W5(MVP) + V1 + **V2 완료** → **배포(Vercel 연결) 단계**
-- **검증**: 단위 테스트 258/258, `tsc`/`lint`/`next build` clean
-- **앱**: 데스크톱(Electron). dev=`npm run dev`, 데스크톱=`npm run app:build && npm run app:start`
-- **마이그레이션**: 0001~0004 **모두 적용 완료**(`_migrations` 기록 확인)
-- **배포 인프라**: `/api/cron/dispatch`(시크릿 검증)·`vercel.json`(30분 크론)·`docs/DEPLOY.md`. 실제 `vercel --prod`만 남음(사용자 계정 연결 필요)
+- **진행도**: W1~W5(MVP)+V1+V2 완료 + 디자인 재설계(B 트레이더 콕핏) + **실거래 매매일지·포트폴리오 개편 완료**. 검증 전부 통과(tsc·lint·vitest 270/270·build·standalone). 마이그레이션 0005·0006 **적용 완료**. 작업 브랜치 커밋 예정/완료.
+- **앱**: 데스크톱(Electron) `/Applications/Stock Desk.app` 설치됨. dev=`npm run dev`, 데스크톱 실행=`npm run app:build && npm run app:start`, 설치형 빌드=`npm run app:dist`. standalone 재빌드 완료(`scripts/electron-prepare.js`).
+- **마이그레이션**: 0001~0006 **전부 적용 완료**.
 
-## 완료 기능
+## 이번 세션 완료분 (실거래 매매일지 + 포트폴리오)
 
-- **W1~W2**: 인프라·인증·시세·차트·워치리스트·시장위젯
-- **W3**: F4 지표·F15 배당·F12 공시 (DART/Finnhub/FMP/EDGAR)
-- **W4**: F5 뉴스·AI 요약/감성·F1 브리핑 (네이버/Finnhub + OpenAI gpt-4o-mini)
-- **W5**: F13 노트, API 사용량 로그, error 바운더리, 거래정지 뱃지
-- **V1**: F2 캘린더(거시 시드+Finnhub 실적), F7 AI 분석(OpenAI 단일, 수동), F9 모의투자(D5), F14 기술지표(SMA/RSI)
-- **V2**: F16 종목 비교(`app/compare` — 최대 4종목 F4 지표 표), F17 뉴스↔주가 오버레이(`price-chart` 일/주봉 뉴스 마커)
+### 백엔드·API
+- `watchlist.ts`: `is_favorite`/`sort_order` 반영(order by sort_order), `setFavorite`·`reorderWatchlist` 추가
+- `lib/validation/market.ts`: `watchlistPatchSchema`(favorite/reorder discriminated union)
+- `app/api/watchlist/route.ts`: `PATCH`(즐겨찾기·정렬)
+- 매매일지: `real-trades.ts`(CRUD)·`portfolio.ts`(computeHoldings·computeRealized·evalHolding·summarizePortfolio, 평균법·하이브리드 통화)·`app/api/trades`·`lib/validation/trades.ts` — 테스트 12/12 포함 전체 270/270 통과
+
+### 프론트엔드
+- **내 종목**(`watchlist-manager.tsx`): 즐겨찾기 섹션(중복 표시)→거래소 고정순서(KOSPI→NASDAQ→KOSDAQ→NYSE→AMEX), @dnd-kit 같은 묶음 내 드래그 정렬, 카드 별 토글, 보유 종목 평가손익(`watchlist-card.tsx`), 하단 고정 요약바+recharts 자산배분 도넛(`portfolio-summary-bar.tsx`)
+- **대시보드**(`stat-tiles.tsx`): KOSPI 타일 → 포트폴리오 KPI 타일(`portfolio-kpi-tile.tsx`, 원화환산 평가금액+손익률). `market-kpi-tile.tsx` 제거
+- **기간별 수익률**(`app/performance/page.tsx`·`performance-view.tsx`): 연도/월/기간 토글 + 누적라인·기간별 바·종목별 도넛(recharts). 사이드바 메뉴 추가(`app-shell.tsx`, 모바일 하단탭 제외)
+- 공용 환율 훅 `lib/hooks/use-usd-krw.ts`(시장지수 원/달러)
+- 손익계산기·매매일지 패널(`profit-calculator.tsx`·`holdings-trades-panel.tsx`·`stock-detail.tsx` 개요탭 통합)
+
+## 남은 작업
+
+- (선택) 데스크톱 설치형 재배포 시 `npm run app:dist`
+- (선택) Vercel 배포: 사용자 환경변수 등록 후 진행
+- 즐겨찾기/시장 묶음이 단일 `sort_order` 컬럼을 공유 → 한 묶음 정렬이 다른 묶음 상대순서에 영향(허용된 단순화). 분리 필요 시 별도 정렬 컬럼 검토.
+
+## 확정 결정 (이번 세션)
+- 매매일지 = 모의투자(paper_*)와 별개 신규 테이블 `real_trades`. 보유/평단/실현손익은 매매기록 **파생 계산**(단일 진실 원천).
+- 차트 = **recharts**(도넛/바/라인). lightweight-charts는 캔들 전용 유지.
+- 통화 합산 = **하이브리드**(원화 환산 통합 + 통화별 분리). 환율 = 시장지수 원/달러.
+- 기간별 수익률 = **전용 페이지 + 사이드바 메뉴**.
+- 드래그 = **같은 묶음(즐겨찾기/시장) 내 순서만**.
 
 ## 키 / 데이터 소스
 
 | 소스 | 용도 | 상태 |
 |---|---|---|
-| KIS | 시세·국내 지표·모의투자 체결가 | 설정됨 |
-| Finnhub | 미국 재무·실적·뉴스·실적캘린더 | 설정 입력 |
-| FMP | 미국 배당(stable) | 설정 입력 |
-| 네이버 | 한국 뉴스 | 설정 입력 |
-| OpenAI gpt-4o-mini | AI 요약·감성·브리핑·분석(F7) | 설정 입력 |
-| Anthropic | F7 듀얼(추후) | 미설정 |
+| KIS | 시세·국내 지표 | 미입력(현재 Yahoo 폴백, 배포본은 데이터센터 IP라 Yahoo 차단됨) |
+| Finnhub / FMP / 네이버 / OpenAI | 미국 재무·배당 / 한국뉴스 / AI | 설정 입력됨 |
 | SEC EDGAR | 미국 공시 | 무인증 |
-| DART | 한국 재무·배당·공시 | 미발급 |
-
-## 보류 / 다음
-
-- **Vercel 배포**: `vercel link` → 환경변수 등록(`docs/DEPLOY.md`) → `vercel --prod` (사용자 계정 인증 필요). 크론은 `vercel.json`로 자동 등록
-- 앱 E2E: 뉴스/공시 AI 요약, 브리핑 생성, 캘린더 갱신, AI 분석 실행, 모의투자 주문 (실 키 입력 후)
-- **데이터 공백**: DART 키 발급 시 `sync:corp-codes` → 한국 펀더멘털/공시 채움
-- **후속**: Anthropic 듀얼 비교뷰, F7 자동분석 `analysis_schedules` 매칭, 예약주문 시초가 체결 완성
+| DART | 한국 재무·배당·공시 | 미발급(한국 펀더멘털 공백) |
+| Anthropic | F7 듀얼(추후) | 미설정 |
 
 ## Decision Log (최신)
-
-- **D10**: 뉴스=네이버/Finnhub, AI=OpenAI gpt-4o-mini(Vercel AI SDK), AI 호출=수동 트리거(크론 골격)
+- **D10**: 뉴스=네이버/Finnhub, AI=OpenAI gpt-4o-mini, AI 호출=수동 트리거(크론 골격)
 - **D9**: 펀더멘털 미국=Finnhub/FMP/EDGAR, 한국=DART(+KIS). 상세 `docs/PRD.md` 0장
-- (V1 F7 OpenAI 단일·수동, F9 D5는 기존 결정 범위 — 신규 D 불필요)

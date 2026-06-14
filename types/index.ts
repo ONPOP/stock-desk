@@ -60,6 +60,8 @@ export interface WatchlistItem {
   currency: Currency;
   group_name: string;
   auto_analysis: boolean;
+  isFavorite: boolean;
+  sortOrder: number;
 }
 
 /** 시장 위젯(F11) 지수/환율/금리 — 표시값(금액 아님) */
@@ -214,6 +216,76 @@ export interface RecentAnalysis {
   confidence: number | null;
   model: string;
   createdAt: string;
+}
+
+// ───────────────────────── 실거래 매매일지 (V2) ─────────────────────────
+
+export type TradeSide = 'buy' | 'sell';
+
+/** 실거래 매매 기록(원천 데이터) */
+export interface RealTrade {
+  id: string;
+  stockId: string;
+  ticker: string;
+  name: string;
+  market: Market;
+  currency: Currency;
+  side: TradeSide;
+  qty: number;
+  price: number; // 체결 단가(최소 단위)
+  tradeDate: string; // YYYY-MM-DD
+  memo: string | null;
+  createdAt: string;
+}
+
+/** 종목별 보유 현황(매매 기록 파생) */
+export interface RealHolding {
+  stockId: string;
+  ticker: string;
+  name: string;
+  market: Market;
+  currency: Currency;
+  qty: number; // 순 보유 수량(매수-매도)
+  avgBuyPrice: number; // 매수 가중평균 평단가(최소 단위)
+  buyAmount: number; // 보유분 매입금액 = qty * avgBuyPrice
+  realizedPnl: number; // 누적 실현손익(최소 단위)
+}
+
+/** 매도 1건의 실현 손익(기간별 수익률용) */
+export interface RealizedTrade {
+  id: string;
+  stockId: string;
+  ticker: string;
+  name: string;
+  market: Market;
+  currency: Currency;
+  qty: number;
+  sellPrice: number;
+  avgBuyPrice: number; // 매도 시점 평단가
+  realizedPnl: number; // (sellPrice - avgBuyPrice) * qty
+  realizedRate: number; // %
+  tradeDate: string;
+}
+
+/** 통화별 합계 */
+export interface CurrencyTotals {
+  currency: Currency;
+  buyAmount: number;
+  currentValue: number;
+  evalPnl: number;
+  realizedPnl: number;
+}
+
+/** 포트폴리오 요약 — 통화별 분리 + 원화 환산 통합(하이브리드) */
+export interface PortfolioSummary {
+  byCurrency: CurrencyTotals[];
+  krwUnified: {
+    buyAmount: number;
+    currentValue: number;
+    evalPnl: number;
+    evalRate: number; // %
+    realizedPnl: number;
+  };
 }
 
 // ───────────────────────── 모의투자 (V1 F9) ─────────────────────────

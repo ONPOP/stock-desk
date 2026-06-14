@@ -23,9 +23,21 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
   const [qty, setQty] = useState('10');
   const [targetReturn, setTargetReturn] = useState('10');
   const [targetPriceInput, setTargetPriceInput] = useState('');
+  // 기준가: 현재가(시세) vs 매수가(직접 입력)
+  const [basis, setBasis] = useState<'current' | 'buy'>('current');
+  const [buyPriceInput, setBuyPriceInput] = useState('');
+
+  const basePriceMinor = useMemo(() => {
+    if (basis === 'current') return priceMinor;
+    const raw = buyPriceInput.trim();
+    if (!NUM.test(raw)) return null;
+    const factor = currency === 'USD' ? 100 : 1;
+    const v = new Decimal(raw).mul(factor).toDecimalPlaces(0).toNumber();
+    return v > 0 ? v : null;
+  }, [basis, buyPriceInput, priceMinor, currency]);
 
   const result = useMemo(() => {
-    if (priceMinor == null) return null;
+    if (basePriceMinor == null) return null;
     const q = Number(qty);
     if (!Number.isInteger(q) || q <= 0) return null;
 
@@ -34,21 +46,21 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
 
     if (mode === 'return-to-price') {
       if (!NUM.test(targetReturn.trim())) return null;
-      targetMinor = targetPriceForReturn(targetReturn.trim(), priceMinor);
+      targetMinor = targetPriceForReturn(targetReturn.trim(), basePriceMinor);
       computedReturn = targetReturn.trim();
     } else {
       if (!NUM.test(targetPriceInput.trim())) return null;
       const factor = currency === 'USD' ? 100 : 1;
       targetMinor = new Decimal(targetPriceInput.trim()).mul(factor).toDecimalPlaces(0).toNumber();
       if (targetMinor <= 0) return null;
-      computedReturn = new Decimal(targetMinor).minus(priceMinor).div(priceMinor).mul(100).toFixed(2);
+      computedReturn = new Decimal(targetMinor).minus(basePriceMinor).div(basePriceMinor).mul(100).toFixed(2);
     }
 
-    const currentValue = priceMinor * q;
+    const currentValue = basePriceMinor * q;
     const targetValue = targetMinor * q;
     const pnl = targetValue - currentValue;
     return { targetMinor, computedReturn, currentValue, targetValue, pnl };
-  }, [priceMinor, qty, targetReturn, targetPriceInput, mode, currency]);
+  }, [basePriceMinor, qty, targetReturn, targetPriceInput, mode, currency]);
 
   const pnlColor = result ? (result.pnl > 0 ? 'text-up' : result.pnl < 0 ? 'text-down' : '') : '';
 
@@ -60,6 +72,39 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
           {priceMinor != null ? formatMoney(priceMinor, currency) : '—'}
         </span>
       </div>
+
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-muted p-[3px]">
+        {(
+          [
+            ['current', '현재가 기준'],
+            ['buy', '매수가 직접입력'],
+          ] as const
+        ).map(([b, label]) => (
+          <button
+            key={b}
+            type="button"
+            onClick={() => setBasis(b)}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              basis === b ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {basis === 'buy' && (
+        <div className="space-y-1.5">
+          <Label htmlFor="calc-buy">매수가 ({currency === 'USD' ? '$' : '₩'})</Label>
+          <Input
+            id="calc-buy"
+            inputMode="decimal"
+            placeholder={currency === 'USD' ? '예: 200.50' : '예: 80000'}
+            value={buyPriceInput}
+            onChange={(e) => setBuyPriceInput(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-1 rounded-full bg-muted p-[3px]">
         {(
@@ -121,7 +166,7 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
             </dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-muted-foreground">현재 평가금액</dt>
+            <dt className="text-muted-foreground">{basis === 'buy' ? '매입 금액' : '현재 평가금액'}</dt>
             <dd className="tabular-nums">{formatMoney(result.currentValue, currency)}</dd>
           </div>
           <div className="flex justify-between">
@@ -138,7 +183,11 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
         </dl>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {priceMinor == null ? '현재가를 불러오는 중입니다.' : '수량과 목표값을 올바르게 입력하세요.'}
+          {basePriceMinor == null
+            ? basis === 'buy'
+              ? '매수가를 입력하세요.'
+              : '현재가를 불러오는 중입니다.'
+            : '수량과 목표값을 올바르게 입력하세요.'}
         </p>
       )}
     </div>
