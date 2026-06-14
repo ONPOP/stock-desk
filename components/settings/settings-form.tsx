@@ -1,13 +1,15 @@
 'use client';
 
 // S8 설정 폼 — KIS/OpenAI/Anthropic 키 저장(마스킹 표시) + KIS 검증 버튼
+// [재설계] 카드/마스킹 상태 뱃지/검증 결과 비주얼만. [보존] 모든 키 상태·save()/validateKis() fetch·payload·ValidateResult·UserSettingsView.
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { Check, CircleCheck, CircleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import type { UserSettingsView } from '@/types';
 
 interface ValidateResult {
@@ -16,6 +18,29 @@ interface ValidateResult {
   message?: string;
   domestic?: { ok: boolean; detail: string };
   overseas?: { ok: boolean; detail: string };
+}
+
+/** 마스킹 값/저장 여부 → 상태 뱃지 */
+function KeyStatus({ masked, set }: { masked?: string | null; set?: boolean }) {
+  if (masked) {
+    return (
+      <Badge variant="outline" className="gap-1 border-0 bg-up-soft font-mono text-up">
+        <Check className="size-3" /> {masked}
+      </Badge>
+    );
+  }
+  if (set) {
+    return (
+      <Badge variant="outline" className="gap-1 border-0 bg-secondary text-muted-foreground">
+        <Check className="size-3" /> 저장됨
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="border-0 bg-amber-500/15 text-amber-600">
+      미설정
+    </Badge>
+  );
 }
 
 export function SettingsForm({ initial }: { initial: UserSettingsView }) {
@@ -104,18 +129,18 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>한국투자증권 KIS OpenAPI</CardTitle>
-          <CardDescription>
-            시세·차트·종목검색에 사용됩니다.{' '}
-            {view.kis_app_key_masked ? `저장된 앱키: ${view.kis_app_key_masked}` : '아직 저장된 키가 없습니다.'}
-          </CardDescription>
+    <div className="space-y-5">
+      <Card className="p-[18px]">
+        <CardHeader className="px-0">
+          <CardTitle className="text-base">한국투자증권 KIS OpenAPI</CardTitle>
+          <CardDescription>시세·차트·종목검색에 사용됩니다.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="kis-app-key">앱키 (App Key)</Label>
+        <CardContent className="space-y-4 px-0">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="kis-app-key">앱키 (App Key)</Label>
+              <KeyStatus masked={view.kis_app_key_masked} />
+            </div>
             <Input
               id="kis-app-key"
               type="password"
@@ -125,8 +150,11 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
               onChange={(e) => setKisAppKey(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="kis-app-secret">앱시크릿 (App Secret)</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="kis-app-secret">앱시크릿 (App Secret)</Label>
+              <KeyStatus set={view.kis_app_secret_set} />
+            </div>
             <Input
               id="kis-app-secret"
               type="password"
@@ -136,40 +164,42 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
               onChange={(e) => setKisAppSecret(e.target.value)}
             />
           </div>
-          <div className="flex gap-2">
-            <Button onClick={validateKis} variant="outline" disabled={validating}>
-              {validating ? '검증 중…' : 'KIS 키 검증'}
-            </Button>
-          </div>
+          <Button onClick={validateKis} variant="outline" size="sm" disabled={validating}>
+            <Check data-icon="inline-start" /> {validating ? '검증 중…' : 'KIS 키 검증'}
+          </Button>
           {validateResult && (
-            <div
-              className="rounded-md border p-3 text-sm"
-              role="status"
-            >
+            <div className="rounded-xl border bg-secondary/50 p-3 text-sm" role="status">
               {validateResult.ok ? (
                 <div className="space-y-1">
-                  <p className="font-medium text-green-600">{validateResult.message}</p>
-                  <p>국내: {validateResult.domestic?.detail}</p>
-                  <p>
+                  <p className="flex items-center gap-1.5 font-medium text-emerald-600">
+                    <CircleCheck className="size-4" /> {validateResult.message}
+                  </p>
+                  <p className="text-muted-foreground">국내: {validateResult.domestic?.detail}</p>
+                  <p className="text-muted-foreground">
                     해외: {validateResult.overseas?.ok ? validateResult.overseas.detail : `실패 — ${validateResult.overseas?.detail}`}
                   </p>
                 </div>
               ) : (
-                <p className="text-red-500">{validateResult.error}</p>
+                <p className="flex items-center gap-1.5 text-up">
+                  <CircleAlert className="size-4" /> {validateResult.error}
+                </p>
               )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>AI API 키</CardTitle>
+      <Card className="p-[18px]">
+        <CardHeader className="px-0">
+          <CardTitle className="text-base">AI API 키</CardTitle>
           <CardDescription>AI 분석(F7)·브리핑(F1)에 사용됩니다. V1에서 활성화됩니다.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="openai-key">OpenAI API Key</Label>
+        <CardContent className="space-y-4 px-0">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="openai-key">OpenAI API Key</Label>
+              <KeyStatus masked={view.openai_key_masked} />
+            </div>
             <Input
               id="openai-key"
               type="password"
@@ -179,8 +209,11 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
               onChange={(e) => setOpenaiKey(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="anthropic-key">Anthropic API Key</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="anthropic-key">Anthropic API Key</Label>
+              <KeyStatus masked={view.anthropic_key_masked} />
+            </div>
             <Input
               id="anthropic-key"
               type="password"
@@ -193,17 +226,20 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>펀더멘털·공시 데이터 소스</CardTitle>
+      <Card className="p-[18px]">
+        <CardHeader className="px-0">
+          <CardTitle className="text-base">펀더멘털·공시 데이터 소스</CardTitle>
           <CardDescription>
             핵심지표(F4)·배당(F15)·공시(F12)에 사용됩니다. 한국=DART, 미국 재무=Finnhub, 미국 배당=FMP.
             미국 공시(SEC EDGAR)는 키가 필요 없습니다.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="dart-key">DART OpenAPI 인증키</Label>
+        <CardContent className="space-y-4 px-0">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="dart-key">DART OpenAPI 인증키</Label>
+              <KeyStatus masked={view.dart_key_masked} />
+            </div>
             <Input
               id="dart-key"
               type="password"
@@ -213,8 +249,11 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
               onChange={(e) => setDartKey(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="finnhub-key">Finnhub API Key</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="finnhub-key">Finnhub API Key</Label>
+              <KeyStatus masked={view.finnhub_key_masked} />
+            </div>
             <Input
               id="finnhub-key"
               type="password"
@@ -224,8 +263,11 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
               onChange={(e) => setFinnhubKey(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="fmp-key">FMP API Key</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="fmp-key">FMP API Key</Label>
+              <KeyStatus masked={view.fmp_key_masked} />
+            </div>
             <Input
               id="fmp-key"
               type="password"
@@ -238,16 +280,19 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>뉴스 데이터 소스</CardTitle>
+      <Card className="p-[18px]">
+        <CardHeader className="px-0">
+          <CardTitle className="text-base">뉴스 데이터 소스</CardTitle>
           <CardDescription>
             한국 뉴스(F5)는 네이버 뉴스 검색 API를 사용합니다. 미국 뉴스는 위 Finnhub 키를 공용합니다.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="naver-client-id">네이버 Client ID</Label>
+        <CardContent className="space-y-4 px-0">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="naver-client-id">네이버 Client ID</Label>
+              <KeyStatus masked={view.naver_client_id_masked} />
+            </div>
             <Input
               id="naver-client-id"
               type="password"
@@ -257,8 +302,11 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
               onChange={(e) => setNaverClientId(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="naver-client-secret">네이버 Client Secret</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="naver-client-secret">네이버 Client Secret</Label>
+              <KeyStatus set={view.naver_client_secret_set} />
+            </div>
             <Input
               id="naver-client-secret"
               type="password"
@@ -271,7 +319,6 @@ export function SettingsForm({ initial }: { initial: UserSettingsView }) {
         </CardContent>
       </Card>
 
-      <Separator />
       <div className="flex justify-end">
         <Button onClick={save} disabled={saving}>
           {saving ? '저장 중…' : '저장'}

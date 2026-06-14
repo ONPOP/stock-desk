@@ -1,14 +1,19 @@
 'use client';
 
 // 종목 상세 — 현재가(시세 폴링) + 차트(F6) + 손익 계산기(F8) + 펀더멘털(F4/F15/F12).
+// [재설계] 헤더 비주얼 + 섹션을 탭(개요/차트/뉴스/AI분석/노트)으로 재구성, 실제 로고.
+// [보존] props 시그니처·useQuote·useState·refresh()/refreshNewsFeed()·reportOutcome·dynamic import 그대로.
 import { useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
+import { ChevronLeft, Star, Clock, RefreshCw } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { CompanyLogo } from '@/components/ui/company-logo';
 import { useQuote } from '@/lib/hooks/use-quote';
 import { formatMoney } from '@/lib/utils/money';
 import { ProfitCalculator } from './profit-calculator';
@@ -29,8 +34,8 @@ export interface Fundamentals {
 }
 
 function changeColor(change: number): string {
-  if (change > 0) return 'text-red-500';
-  if (change < 0) return 'text-blue-500';
+  if (change > 0) return 'text-up';
+  if (change < 0) return 'text-down';
   return 'text-muted-foreground';
 }
 
@@ -132,102 +137,138 @@ export function StockDetail({
     }
   }
 
-  return (
-    <div className="space-y-6 p-6">
-      <div>
-        <Link href="/stocks" className="text-sm text-muted-foreground hover:underline">
-          ← 내 종목
-        </Link>
-      </div>
+  const name = stock.name_kr ?? stock.name_en ?? stock.ticker;
 
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold">{stock.name_kr ?? stock.name_en ?? stock.ticker}</h1>
-          <Badge variant="secondary">{stock.market}</Badge>
-          {stock.is_active === false && <Badge variant="destructive">거래정지/상폐</Badge>}
-          <span className="text-sm text-muted-foreground">{stock.ticker}</span>
+  return (
+    <div className="mx-auto max-w-[1240px] space-y-5 p-6">
+      <Link
+        href="/stocks"
+        className={buttonVariants({ variant: 'ghost', size: 'sm', className: '-ml-2 self-start text-muted-foreground' })}
+      >
+        <ChevronLeft data-icon="inline-start" /> 내 종목
+      </Link>
+
+      <header className="flex flex-wrap items-start gap-4">
+        <CompanyLogo ticker={stock.ticker} name={name} size={52} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
+            <Badge variant="secondary">{stock.market}</Badge>
+            {stock.is_active === false && <Badge variant="destructive">거래정지/상폐</Badge>}
+            <span className="font-mono text-sm text-muted-foreground">{stock.ticker}</span>
+          </div>
+          <div className="mt-1.5">
+            {loading && !quote ? (
+              <Skeleton className="h-9 w-40" />
+            ) : error && !quote ? (
+              <p className="text-sm text-muted-foreground">시세를 불러오지 못했습니다: {error}</p>
+            ) : quote ? (
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="text-[34px] leading-none font-bold tracking-tight tabular-nums">
+                  {formatMoney(quote.price, quote.currency)}
+                </span>
+                <span className={`text-base font-semibold tabular-nums ${changeColor(quote.change)}`}>
+                  {quote.change > 0 ? '+' : ''}
+                  {formatMoney(quote.change, quote.currency)} ({quote.change > 0 ? '+' : ''}
+                  {quote.changeRate}%)
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
           {source && (
-            <Badge variant="outline" className="ml-auto text-xs">
-              시세 출처: {source === 'kis' ? 'KIS' : 'Yahoo'}
+            <Badge variant="outline" className="gap-1">
+              <Clock /> 시세 출처: {source === 'kis' ? 'KIS' : 'Yahoo'}
             </Badge>
           )}
-        </div>
-        <div>
-          {loading && !quote ? (
-            <Skeleton className="h-9 w-40" />
-          ) : error && !quote ? (
-            <p className="text-sm text-muted-foreground">시세를 불러오지 못했습니다: {error}</p>
-          ) : quote ? (
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold tabular-nums">{formatMoney(quote.price, quote.currency)}</span>
-              <span className={`text-base tabular-nums ${changeColor(quote.change)}`}>
-                {quote.change > 0 ? '+' : ''}
-                {formatMoney(quote.change, quote.currency)} ({quote.change > 0 ? '+' : ''}
-                {quote.changeRate}%)
-              </span>
-            </div>
-          ) : null}
+          <Button variant="outline" size="sm">
+            <Star data-icon="inline-start" /> 관심
+          </Button>
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="p-4 lg:col-span-2">
-          <PriceChart
-            ticker={stock.ticker}
-            market={stock.market}
-            currency={stock.currency}
-            newsMarkers={newsItems.map((n) => ({ date: n.publishedAt, title: n.title }))}
-          />
-        </Card>
-        <Card className="space-y-3 p-4">
-          <h2 className="font-semibold">손익 계산기</h2>
-          <ProfitCalculator priceMinor={quote?.price ?? null} currency={stock.currency} />
-        </Card>
-      </div>
+      <Tabs defaultValue="overview">
+        <TabsList variant="line" className="w-full justify-start border-b">
+          <TabsTrigger value="overview">개요</TabsTrigger>
+          <TabsTrigger value="chart">차트</TabsTrigger>
+          <TabsTrigger value="news">뉴스</TabsTrigger>
+          <TabsTrigger value="ai">AI분석</TabsTrigger>
+          <TabsTrigger value="notes">노트</TabsTrigger>
+        </TabsList>
 
-      {/* AI 분석 (F7) */}
-      <Card className="space-y-3 p-4">
-        <AnalysisPanel stock={stock} initialAnalyses={analyses} />
-      </Card>
+        {/* 개요 — 핵심 지표 + 배당 + 손익 계산기 */}
+        <TabsContent value="overview" className="space-y-5 pt-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">기업 정보</h2>
+            <Button onClick={refresh} variant="outline" size="sm" disabled={refreshing}>
+              <RefreshCw data-icon="inline-start" className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? '갱신 중…' : '갱신'}
+            </Button>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-3">
+            <Card className="gap-3 p-[18px] lg:col-span-2">
+              <h3 className="font-semibold">핵심 지표</h3>
+              <MetricsPanel metrics={fund.metrics} currency={stock.currency} />
+            </Card>
+            <div className="flex flex-col gap-5">
+              <Card className="gap-3 p-[18px]">
+                <h3 className="font-semibold">배당</h3>
+                <DividendCard dividends={fund.dividends} currency={stock.currency} />
+              </Card>
+              <Card className="gap-3 p-[18px]">
+                <h3 className="font-semibold">손익 계산기</h3>
+                <ProfitCalculator priceMinor={quote?.price ?? null} currency={stock.currency} />
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
 
-      {/* 펀더멘털 (F4/F15/F12) */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">기업 정보</h2>
-        <Button onClick={refresh} variant="outline" size="sm" disabled={refreshing}>
-          {refreshing ? '갱신 중…' : '갱신'}
-        </Button>
-      </div>
+        {/* 차트 */}
+        <TabsContent value="chart" className="pt-5">
+          <Card className="p-[18px]">
+            <PriceChart
+              ticker={stock.ticker}
+              market={stock.market}
+              currency={stock.currency}
+              newsMarkers={newsItems.map((n) => ({ date: n.publishedAt, title: n.title }))}
+            />
+          </Card>
+        </TabsContent>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="space-y-3 p-4 lg:col-span-2">
-          <h3 className="font-semibold">핵심 지표</h3>
-          <MetricsPanel metrics={fund.metrics} currency={stock.currency} />
-        </Card>
-        <Card className="space-y-3 p-4">
-          <h3 className="font-semibold">배당</h3>
-          <DividendCard dividends={fund.dividends} currency={stock.currency} />
-        </Card>
-      </div>
+        {/* 뉴스 — 뉴스 + 공시 */}
+        <TabsContent value="news" className="grid gap-5 pt-5 lg:grid-cols-3">
+          <Card className="gap-3 p-[18px] lg:col-span-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">뉴스</h3>
+              <Button onClick={refreshNewsFeed} variant="outline" size="sm" disabled={newsRefreshing}>
+                <RefreshCw data-icon="inline-start" className={newsRefreshing ? 'animate-spin' : ''} />
+                {newsRefreshing ? '갱신 중…' : '뉴스 갱신'}
+              </Button>
+            </div>
+            <NewsFeed news={newsItems} />
+          </Card>
+          <Card className="gap-3 p-[18px]">
+            <h3 className="font-semibold">공시</h3>
+            <DisclosureFeed disclosures={fund.disclosures} />
+          </Card>
+        </TabsContent>
 
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">공시</h3>
-        <DisclosureFeed disclosures={fund.disclosures} />
-      </Card>
+        {/* AI 분석 (F7) */}
+        <TabsContent value="ai" className="pt-5">
+          <Card className="max-w-3xl gap-3 p-[18px]">
+            <AnalysisPanel stock={stock} initialAnalyses={analyses} />
+          </Card>
+        </TabsContent>
 
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">뉴스</h3>
-          <Button onClick={refreshNewsFeed} variant="outline" size="sm" disabled={newsRefreshing}>
-            {newsRefreshing ? '갱신 중…' : '뉴스 갱신'}
-          </Button>
-        </div>
-        <NewsFeed news={newsItems} />
-      </Card>
-
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">노트</h3>
-        <NotesClient initialNotes={stockNotes} stockId={stock.id} />
-      </Card>
+        {/* 노트 */}
+        <TabsContent value="notes" className="pt-5">
+          <Card className="max-w-3xl gap-3 p-[18px]">
+            <h3 className="font-semibold">노트</h3>
+            <NotesClient initialNotes={stockNotes} stockId={stock.id} />
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -1,10 +1,13 @@
 'use client';
 
 // 종목 검색·등록 (F3) — 디바운스 검색, 시장 뱃지, 중복 등록 방지.
+// [재설계] 검색 인풋·결과 드롭다운 비주얼 + 실제 로고. [보존] 디바운스 fetch·abort·중복방지·StockSearchProps.
 import { useEffect, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CompanyLogo } from '@/components/ui/company-logo';
 import type { Market, StockSearchResult } from '@/types';
 
 interface StockSearchProps {
@@ -58,29 +61,36 @@ export function StockSearch({ existingKeys, onAdd }: StockSearchProps) {
 
   return (
     <div className="space-y-3">
-      <Input
-        type="search"
-        placeholder="종목명·티커·종목코드 검색 (예: 삼성전자, AAPL, 005930)"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        aria-label="종목 검색"
-      />
+      <div className="relative">
+        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          className="h-11 rounded-xl pl-9"
+          placeholder="종목명·티커·종목코드 검색 (예: 삼성전자, AAPL, 005930)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="종목 검색"
+        />
+      </div>
       {loading && <p className="text-sm text-muted-foreground">검색 중…</p>}
       {!loading && query.trim().length > 0 && results.length === 0 && (
         <p className="text-sm text-muted-foreground">검색 결과가 없습니다.</p>
       )}
       {results.length > 0 && (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
           {results.map((r) => {
             const registered = existingKeys.has(keyOf(r.ticker, r.market));
             return (
               <li key={keyOf(r.ticker, r.market)} className="flex items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{r.name_kr ?? r.name_en ?? r.ticker}</span>
-                    <Badge variant="secondary">{r.market}</Badge>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <CompanyLogo ticker={r.ticker} name={r.name_kr ?? r.name_en} size={30} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{r.name_kr ?? r.name_en ?? r.ticker}</span>
+                      <Badge variant="secondary" className="shrink-0">{r.market}</Badge>
+                    </div>
+                    <p className="font-mono text-xs text-muted-foreground">{r.ticker}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{r.ticker}</p>
                 </div>
                 <Button
                   size="sm"

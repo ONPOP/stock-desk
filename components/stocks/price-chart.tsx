@@ -2,6 +2,7 @@
 
 // 주가 차트 (F6) + 기술지표 (F14) — TradingView Lightweight Charts v5.
 // 캔들 + 거래량 + 이동평균선(5/20/60/120) + RSI(별도 pane). 기간·지표 토글.
+// [재설계] 색상 팔레트(UP/DOWN/MA/RSI/거래량)·툴바만 변경. [보존] 차트 API·fetch(/api/candles)·지표 계산·마커 로직 전부 그대로.
 import { useEffect, useRef, useState } from 'react';
 import {
   createChart,
@@ -39,17 +40,19 @@ const PERIODS: Period[] = [
   { label: '5년', interval: '1w', count: 260 },
 ];
 
-// 이동평균선 (F14)
+// 이동평균선 (F14) — 재설계 팔레트
 const MA_CONFIGS = [
-  { period: 5, color: '#f59e0b' },
-  { period: 20, color: '#3b82f6' },
+  { period: 5, color: '#f0a020' },
+  { period: 20, color: '#6366f1' },
   { period: 60, color: '#a855f7' },
   { period: 120, color: '#9ca3af' },
 ];
 
-// 상승 빨강 / 하락 파랑 (한국 관습)
-const UP = '#ef4444';
-const DOWN = '#3b82f6';
+// 상승 빨강 / 하락 파랑 (한국 관습) — 재설계 톤
+const UP = '#d63b3f';
+const DOWN = '#3a6fd8';
+const UP_VOL = 'rgba(214,59,63,0.32)';
+const DOWN_VOL = 'rgba(58,111,216,0.32)';
 
 export interface PriceChartProps {
   ticker: string;
@@ -80,11 +83,11 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#71717a' },
-      grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(120,120,120,0.12)' } },
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#9aa0ad' },
+      grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(20,24,40,0.06)' } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: period.interval === '1m' },
-      crosshair: { horzLine: { labelBackgroundColor: '#6b7280' }, vertLine: { labelBackgroundColor: '#6b7280' } },
+      crosshair: { horzLine: { labelBackgroundColor: '#4f46e5' }, vertLine: { labelBackgroundColor: '#4f46e5' } },
     });
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: UP,
@@ -178,7 +181,7 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
       candles.map((c) => ({
         time: toTime(c.ts),
         value: c.volume,
-        color: c.c >= c.o ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
+        color: c.c >= c.o ? UP_VOL : DOWN_VOL,
       })),
     );
 
@@ -218,7 +221,7 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
             return true;
           })
           .sort((a, b) => a - b)
-          .map((t) => ({ time: t as UTCTimestamp, position: 'aboveBar', color: '#f59e0b', shape: 'circle', text: '뉴스' }));
+          .map((t) => ({ time: t as UTCTimestamp, position: 'aboveBar', color: '#4f46e5', shape: 'circle', text: '뉴스' }));
         markersRef.current.setMarkers(markers);
       }
     }
@@ -236,22 +239,23 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1 rounded-full bg-muted p-[3px]">
         {PERIODS.map((p) => (
           <Button
             key={p.label}
             size="sm"
             variant={p.label === period.label ? 'default' : 'ghost'}
+            className="rounded-full"
             onClick={() => setPeriod(p)}
           >
             {p.label}
           </Button>
         ))}
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <Button size="sm" variant={showMa ? 'default' : 'ghost'} onClick={() => setShowMa((v) => !v)}>
+        <Button size="sm" variant={showMa ? 'default' : 'ghost'} className="rounded-full" onClick={() => setShowMa((v) => !v)}>
           이평선
         </Button>
-        <Button size="sm" variant={showRsi ? 'default' : 'ghost'} onClick={() => setShowRsi((v) => !v)}>
+        <Button size="sm" variant={showRsi ? 'default' : 'ghost'} className="rounded-full" onClick={() => setShowRsi((v) => !v)}>
           RSI
         </Button>
       </div>

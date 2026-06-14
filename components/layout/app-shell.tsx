@@ -1,20 +1,25 @@
 'use client';
 
 // PC 사이드바 / 모바일 하단 탭 — lg(1024px) 분기 (D2, PRD 7장)
+// [재설계] 비주얼만 변경: lucide 아이콘 + 인디고 액티브 pill + 브랜드 마크.
+// [보존] 라우트 목록·isActive 판정·HIDDEN_ON_MOBILE·lg 분기 그대로.
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import {
+  LayoutDashboard, CalendarDays, TrendingUp, Scale,
+  NotebookPen, Briefcase, Settings, type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// PC 사이드바 (노트 포함 6개)
-const NAV_ITEMS = [
-  { href: '/', label: '대시보드', icon: '⌂' },
-  { href: '/calendar', label: '캘린더', icon: '📅' },
-  { href: '/stocks', label: '내 종목', icon: '📈' },
-  { href: '/compare', label: '비교', icon: '⚖' },
-  { href: '/notes', label: '노트', icon: '📝' },
-  { href: '/paper', label: '모의투자', icon: '💼' },
-  { href: '/settings', label: '설정', icon: '⚙' },
-] as const;
+const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: '/', label: '대시보드', icon: LayoutDashboard },
+  { href: '/calendar', label: '캘린더', icon: CalendarDays },
+  { href: '/stocks', label: '내 종목', icon: TrendingUp },
+  { href: '/compare', label: '비교', icon: Scale },
+  { href: '/notes', label: '노트', icon: NotebookPen },
+  { href: '/paper', label: '모의투자', icon: Briefcase },
+  { href: '/settings', label: '설정', icon: Settings },
+];
 
 // 모바일 하단 탭은 PRD 7장 고정 5개 (비교·노트 제외 — 사이드바·종목상세에서 접근)
 const HIDDEN_ON_MOBILE = new Set(['/notes', '/compare']);
@@ -35,54 +40,76 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       {/* PC 사이드바 */}
-      <aside className="hidden lg:flex lg:w-56 lg:flex-col lg:border-r lg:bg-sidebar">
-        <div className="px-5 py-5">
-          <Link href="/" className="text-lg font-bold tracking-tight">
-            Stock Desk
-          </Link>
-        </div>
-        <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="주 메뉴">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive(pathname, item.href) ? 'page' : undefined}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                isActive(pathname, item.href)
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-              )}
-            >
-              <span aria-hidden>{item.icon}</span>
-              {item.label}
-            </Link>
-          ))}
+      <aside className="sticky top-0 hidden h-screen w-58 shrink-0 flex-col border-r bg-sidebar px-3.5 py-4.5 lg:flex">
+        <Link href="/" className="mb-3 flex items-center gap-2.5 px-2 py-1">
+          <span className="flex size-9 items-center justify-center rounded-[10px] bg-ink text-ink-foreground shadow-lg">
+            <TrendingUp className="size-5" />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-base font-semibold tracking-tight">Stock Desk</span>
+            <span className="truncate text-[11px] text-muted-foreground">1인용 주식 워크스페이스</span>
+          </span>
+        </Link>
+        <p className="px-2.5 pt-2 pb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/80 uppercase">메뉴</p>
+        <nav className="flex flex-1 flex-col gap-0.5" aria-label="주 메뉴">
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-2.5 rounded-[11px] px-3 py-2 text-[13.5px] font-medium transition-colors',
+                  active
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <Icon className="size-[18px] shrink-0" />
+                {label}
+              </Link>
+            );
+          })}
         </nav>
+        <div className="mt-auto pt-3">
+          <div className="flex items-center gap-2.5 rounded-xl border bg-secondary/60 p-2">
+            <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-fuchsia-500 text-xs font-semibold text-white">
+              나
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-[13px] font-semibold">내 워크스페이스</span>
+              <span className="truncate text-[11px] text-muted-foreground">라이트 · KIS 연동</span>
+            </span>
+          </div>
+        </div>
       </aside>
 
       {/* 본문 — 모바일은 하단 탭 높이만큼 패딩 */}
-      <main className="flex-1 pb-16 lg:pb-0">{children}</main>
+      <main className="min-w-0 flex-1 pb-20 lg:pb-0">{children}</main>
 
       {/* 모바일 하단 탭 */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 flex border-t bg-background lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 flex border-t bg-background/85 px-1 pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom))] backdrop-blur-md lg:hidden"
         aria-label="하단 메뉴"
       >
-        {BOTTOM_TABS.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={isActive(pathname, item.href) ? 'page' : undefined}
-            className={cn(
-              'flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]',
-              isActive(pathname, item.href) ? 'font-semibold text-foreground' : 'text-muted-foreground',
-            )}
-          >
-            <span aria-hidden className="text-base leading-none">{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
+        {BOTTOM_TABS.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'flex flex-1 flex-col items-center gap-1 py-1.5 text-[10.5px]',
+                active ? 'font-semibold text-sidebar-accent-foreground' : 'text-muted-foreground',
+              )}
+            >
+              <Icon className="size-5" />
+              {label}
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );

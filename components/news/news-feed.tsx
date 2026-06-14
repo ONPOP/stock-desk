@@ -1,13 +1,15 @@
 'use client';
 
 // F5 뉴스 피드 — 감성 뱃지(호재/악재/중립) + 제목 + 매체·시각 + AI 3줄 요약 + 원문 링크.
+// [재설계] 칩/리스트 비주얼만. [보존] useState 필터·SENTIMENT 색(호재=빨강/악재=파랑)·NewsItem·정렬.
 import { useMemo, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { NewsItem, Sentiment } from '@/types';
 
 const SENTIMENT: Record<Sentiment, { label: string; className: string }> = {
-  positive: { label: '호재', className: 'bg-red-500/10 text-red-600 border-red-500/30' },
-  negative: { label: '악재', className: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
+  positive: { label: '호재', className: 'bg-up-soft text-up' },
+  negative: { label: '악재', className: 'bg-down-soft text-down' },
   neutral: { label: '중립', className: 'bg-muted text-muted-foreground' },
 };
 
@@ -45,8 +47,10 @@ export function NewsFeed({ news }: { news: NewsItem[] }) {
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                filter === f ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:bg-muted'
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                filter === f
+                  ? 'border-transparent bg-foreground text-background'
+                  : 'border-border text-muted-foreground hover:bg-muted'
               }`}
             >
               {f === ALL ? ALL : SENTIMENT[f].label}
@@ -56,10 +60,10 @@ export function NewsFeed({ news }: { news: NewsItem[] }) {
       )}
       <ul className="divide-y">
         {filtered.map((n, i) => (
-          <li key={`${n.url}-${i}`} className="space-y-1 py-2.5">
+          <li key={`${n.url}-${i}`} className="space-y-1.5 py-3">
             <div className="flex items-start gap-2">
               {n.sentiment && (
-                <Badge variant="outline" className={`shrink-0 text-[10px] ${SENTIMENT[n.sentiment].className}`}>
+                <Badge variant="outline" className={`shrink-0 border-0 text-[10px] ${SENTIMENT[n.sentiment].className}`}>
                   {SENTIMENT[n.sentiment].label}
                 </Badge>
               )}
@@ -72,9 +76,10 @@ export function NewsFeed({ news }: { news: NewsItem[] }) {
               >
                 {n.title}
               </a>
+              <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70" />
             </div>
-            {n.summaryAi && <p className="text-xs text-muted-foreground">{n.summaryAi}</p>}
-            <p className="text-[11px] tabular-nums text-muted-foreground">
+            {n.summaryAi && <p className="text-xs leading-relaxed text-muted-foreground">{n.summaryAi}</p>}
+            <p className="font-mono text-[11px] tabular-nums text-muted-foreground/80">
               {[n.source, fmtDate(n.publishedAt)].filter(Boolean).join(' · ')}
             </p>
           </li>

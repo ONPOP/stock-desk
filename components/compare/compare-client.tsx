@@ -1,8 +1,10 @@
 'use client';
 
 // F16 종목 비교 — 워치리스트에서 2~4개 선택 → 핵심 지표(F4) 표 비교.
+// [재설계] 칩·표 비주얼 + 실제 로고. [보존] selected 상태·toggle(MAX 4)·ROWS render·CompareItem.
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { CompanyLogo } from '@/components/ui/company-logo';
 import { formatCompactMoney } from '@/lib/utils/money';
 import type { CompareItem, Currency, StockMetrics } from '@/types';
 
@@ -51,48 +53,54 @@ export function CompareClient({ items }: { items: CompareItem[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {items.map((i) => (
-          <button
-            key={i.stockId}
-            type="button"
-            onClick={() => toggle(i.stockId)}
-            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-              selected.includes(i.stockId)
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            {i.name} <span className="text-xs opacity-70">{i.ticker}</span>
-          </button>
-        ))}
+      <div className="rounded-2xl border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          {items.map((i) => {
+            const on = selected.includes(i.stockId);
+            return (
+              <button
+                key={i.stockId}
+                type="button"
+                onClick={() => toggle(i.stockId)}
+                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  on ? 'border-transparent bg-foreground text-background' : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <CompanyLogo ticker={i.ticker} name={i.name} size={18} />
+                {i.name} <span className="font-mono text-xs opacity-60">{i.ticker}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          최대 {MAX}개까지 선택. 지표가 비어 있으면 종목 상세에서 &quot;갱신&quot;을 먼저 실행하세요. · 출처 DART/Finnhub/FMP
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground">최대 {MAX}개까지 선택. 지표가 비어 있으면 종목 상세에서 &quot;갱신&quot;을 먼저 실행하세요.</p>
 
       {chosen.length === 0 ? (
         <p className="text-sm text-muted-foreground">비교할 종목을 선택하세요.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] border-collapse text-sm">
+        <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+          <table className="w-full min-w-[520px] border-collapse text-sm">
             <thead>
               <tr className="border-b">
-                <th className="py-2 pr-4 text-left text-xs font-medium text-muted-foreground">지표</th>
+                <th className="p-4 text-left text-xs font-medium text-muted-foreground">지표</th>
                 {chosen.map((c) => (
-                  <th key={c.stockId} className="py-2 pl-4 text-right">
-                    <div className="font-semibold">{c.name}</div>
-                    <Badge variant="secondary" className="mt-0.5 text-[10px]">
-                      {c.ticker}
-                    </Badge>
+                  <th key={c.stockId} className="p-4 text-right align-bottom">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="font-semibold whitespace-nowrap">{c.name}</span>
+                      <Badge variant="secondary" className="font-mono text-[10px]">{c.ticker}</Badge>
+                    </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {ROWS.map((row) => (
-                <tr key={row.label} className="border-b last:border-0">
-                  <td className="py-2 pr-4 text-xs text-muted-foreground">{row.label}</td>
+                <tr key={row.label} className="border-b transition-colors last:border-0 hover:bg-secondary/50">
+                  <td className="p-4 text-xs text-muted-foreground">{row.label}</td>
                   {chosen.map((c) => (
-                    <td key={c.stockId} className="py-2 pl-4 text-right tabular-nums">
+                    <td key={c.stockId} className="p-4 text-right tabular-nums">
                       {row.render(c.metrics, c.currency)}
                     </td>
                   ))}

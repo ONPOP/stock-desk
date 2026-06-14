@@ -1,8 +1,10 @@
 'use client';
 
 // 내 종목 관리 (F3) — 검색 등록 + 그룹별 워치리스트 그리드. 낙관적 업데이트 + 실패 롤백.
+// [재설계] 그룹 헤더 비주얼만. [보존] handleAdd/handleRemove fetch·낙관적 업데이트·groups 메모·props.
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { StockSearch } from './stock-search';
 import { WatchlistCard } from './watchlist-card';
 import type { StockSearchResult, WatchlistItem } from '@/types';
@@ -67,8 +69,11 @@ export function WatchlistManager({ initial }: { initial: WatchlistItem[] }) {
       ) : (
         groups.map(([group, list]) => (
           <section key={group} className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground">{group}</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">{group}</h2>
+              <Badge variant="secondary">{list.length}</Badge>
+            </div>
+            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
               {list.map((it) => (
                 <WatchlistCard key={it.stock_id} item={it} onRemove={handleRemove} />
               ))}

@@ -1,4 +1,6 @@
 // F4 핵심지표 패널 — 밸류에이션 그리드 + 분기/연간 실적 미니차트.
+// [재설계] 지표 그리드를 카드형 셀로. [보존] ratio/eps/money·series 계산·MiniBarChart·출처/기준 표기.
+import { Clock } from 'lucide-react';
 import type { Currency, StockMetrics } from '@/types';
 import { formatCompactMoney } from '@/lib/utils/money';
 import { MiniBarChart } from '@/components/ui/mini-bar-chart';
@@ -18,9 +20,9 @@ function money(v: number | null, currency: Currency): string {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium tabular-nums">{value}</dd>
+    <div className="border-r border-b p-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 lg:[&:nth-child(3n)]:border-r lg:[&:nth-child(4n)]:border-r-0">
+      <dt className="text-[11.5px] text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-base font-semibold tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -42,7 +44,7 @@ export function MetricsPanel({ metrics, currency }: { metrics: StockMetrics[]; c
 
   return (
     <div className="space-y-5">
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
+      <dl className="grid grid-cols-2 overflow-hidden rounded-xl border-t border-l sm:grid-cols-3 lg:grid-cols-4">
         <Metric label="시가총액" value={money(latest.marketCap, currency)} />
         <Metric label="PER" value={ratio(latest.per)} />
         <Metric label="PBR" value={ratio(latest.pbr)} />
@@ -68,8 +70,8 @@ export function MetricsPanel({ metrics, currency }: { metrics: StockMetrics[]; c
           />
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">
-        출처: {latest.source.toUpperCase()} · 기준 {latest.asOfDate}
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <Clock className="size-3" /> 출처: {latest.source.toUpperCase()} · 기준 {latest.asOfDate}
       </p>
     </div>
   );

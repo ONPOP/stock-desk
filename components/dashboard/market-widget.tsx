@@ -1,7 +1,9 @@
 'use client';
 
 // 시장 대시보드 위젯 (F11) — 지수·환율·금리 한 줄 바, 30초 폴링. 상승 빨강·하락 파랑.
+// [재설계] 비주얼만 변경(셀 구분선·타이포·등락 아이콘). [보존] fetch·30초 폴링·changeColor·MarketIndex.
 import { useEffect, useState } from 'react';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { MarketIndex } from '@/types';
 
@@ -13,8 +15,8 @@ function fmtValue(v: number, unit: MarketIndex['unit']): string {
 }
 
 function changeColor(change: number): string {
-  if (change > 0) return 'text-red-500';
-  if (change < 0) return 'text-blue-500';
+  if (change > 0) return 'text-up';
+  if (change < 0) return 'text-down';
   return 'text-muted-foreground';
 }
 
@@ -45,9 +47,9 @@ export function MarketWidget() {
 
   if (loading) {
     return (
-      <div className="flex gap-6 overflow-x-auto">
+      <div className="flex gap-0 overflow-x-auto">
         {Array.from({ length: 7 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-24 shrink-0" />
+          <Skeleton key={i} className="mx-5 h-12 w-24 shrink-0" />
         ))}
       </div>
     );
@@ -58,12 +60,13 @@ export function MarketWidget() {
   }
 
   return (
-    <div className="flex gap-6 overflow-x-auto pb-1">
+    <div className="flex overflow-x-auto">
       {indices.map((idx) => (
-        <div key={idx.key} className="flex shrink-0 flex-col">
-          <span className="text-xs text-muted-foreground">{idx.label}</span>
-          <span className="font-semibold tabular-nums">{fmtValue(idx.value, idx.unit)}</span>
-          <span className={`text-xs tabular-nums ${changeColor(idx.change)}`}>
+        <div key={idx.key} className="flex shrink-0 flex-col gap-0.5 border-r px-5 py-1 last:border-r-0">
+          <span className="text-[11.5px] font-medium text-muted-foreground">{idx.label}</span>
+          <span className="text-[15.5px] font-semibold tabular-nums">{fmtValue(idx.value, idx.unit)}</span>
+          <span className={`flex items-center gap-1 text-[11.5px] font-medium tabular-nums ${changeColor(idx.change)}`}>
+            {idx.change >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
             {idx.change > 0 ? '+' : ''}
             {idx.changeRate}%
           </span>

@@ -1,11 +1,11 @@
 'use client';
 
 // 손익 계산기 (F8) — 현재가 자동 입력(시세 폴링), 목표수익률↔목표가 양방향, 현재가 갱신 시 자동 재계산.
+// [재설계] 입력/결과 비주얼만. [보존] Props·Decimal·targetPriceForReturn·useMemo 계산·손익 색(빨강/파랑).
 import { useMemo, useState } from 'react';
 import Decimal from 'decimal.js';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 import { formatMoney, targetPriceForReturn } from '@/lib/utils/money';
 import type { Currency } from '@/types';
 
@@ -37,7 +37,6 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
       targetMinor = targetPriceForReturn(targetReturn.trim(), priceMinor);
       computedReturn = targetReturn.trim();
     } else {
-      // 목표가(주요 단위) → 최소 단위 정수로 변환
       if (!NUM.test(targetPriceInput.trim())) return null;
       const factor = currency === 'USD' ? 100 : 1;
       targetMinor = new Decimal(targetPriceInput.trim()).mul(factor).toDecimalPlaces(0).toNumber();
@@ -51,7 +50,7 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
     return { targetMinor, computedReturn, currentValue, targetValue, pnl };
   }, [priceMinor, qty, targetReturn, targetPriceInput, mode, currency]);
 
-  const pnlColor = result ? (result.pnl > 0 ? 'text-red-500' : result.pnl < 0 ? 'text-blue-500' : '') : '';
+  const pnlColor = result ? (result.pnl > 0 ? 'text-up' : result.pnl < 0 ? 'text-down' : '') : '';
 
   return (
     <div className="space-y-4">
@@ -62,30 +61,33 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
         </span>
       </div>
 
-      <div className="flex gap-1">
-        <Button
-          size="sm"
-          variant={mode === 'return-to-price' ? 'default' : 'ghost'}
-          onClick={() => setMode('return-to-price')}
-        >
-          수익률 → 목표가
-        </Button>
-        <Button
-          size="sm"
-          variant={mode === 'price-to-return' ? 'default' : 'ghost'}
-          onClick={() => setMode('price-to-return')}
-        >
-          목표가 → 수익률
-        </Button>
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-muted p-[3px]">
+        {(
+          [
+            ['return-to-price', '수익률 → 목표가'],
+            ['price-to-return', '목표가 → 수익률'],
+          ] as const
+        ).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              mode === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <Label htmlFor="calc-qty">보유 수량</Label>
           <Input id="calc-qty" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
         </div>
         {mode === 'return-to-price' ? (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="calc-return">목표 수익률 (%)</Label>
             <Input
               id="calc-return"
@@ -95,7 +97,7 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
             />
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="calc-price">목표가</Label>
             <Input
               id="calc-price"
@@ -109,7 +111,7 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
       </div>
 
       {result ? (
-        <dl className="space-y-2 rounded-md border p-3 text-sm">
+        <dl className="space-y-2 rounded-xl border bg-secondary/50 p-3.5 text-sm">
           <div className="flex justify-between">
             <dt className="text-muted-foreground">{mode === 'return-to-price' ? '목표 주가' : '예상 수익률'}</dt>
             <dd className="font-medium tabular-nums">
@@ -126,7 +128,7 @@ export function ProfitCalculator({ priceMinor, currency }: ProfitCalculatorProps
             <dt className="text-muted-foreground">도달 시 평가금액</dt>
             <dd className="tabular-nums">{formatMoney(result.targetValue, currency)}</dd>
           </div>
-          <div className="flex justify-between border-t pt-2">
+          <div className="flex justify-between border-t pt-2.5">
             <dt className="text-muted-foreground">손익</dt>
             <dd className={`font-semibold tabular-nums ${pnlColor}`}>
               {result.pnl > 0 ? '+' : ''}

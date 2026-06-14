@@ -200,6 +200,22 @@ export interface CompareItem {
   metrics: StockMetrics | null;
 }
 
+// ───────────────────────── 대시보드 풀구성 (V2) ─────────────────────────
+
+/** 대시보드 신규 AI 분석 타일용 — ai_analyses + stocks 조인 */
+export interface RecentAnalysis {
+  id: string;
+  stockId: string;
+  ticker: string;
+  name: string;
+  market: Market;
+  currency: Currency;
+  position: AnalysisPosition | null;
+  confidence: number | null;
+  model: string;
+  createdAt: string;
+}
+
 // ───────────────────────── 모의투자 (V1 F9) ─────────────────────────
 
 export interface PaperAccount {

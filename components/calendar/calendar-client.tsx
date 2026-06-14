@@ -1,17 +1,25 @@
 'use client';
 
-// F2 캘린더 월 보기 — 거시(보라)·실적(주황)·수동(파랑) 일정. "(예정)" 라벨, 수동 추가/삭제, 일정 갱신.
+// F2 캘린더 월 보기 — 거시(보라)·실적(빨강)·수동(인디고) 일정. "(예정)" 라벨, 수동 추가/삭제, 일정 갱신.
+// [재설계] 그리드·칩·툴바 비주얼. [보존] loadMonth/addEvent/refresh/remove fetch·changeMonth·eventsByDate·셀 계산.
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { ChevronLeft, ChevronRight, RefreshCw, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { CalendarEvent, CalendarEventType } from '@/types';
 
 const TYPE_COLOR: Record<CalendarEventType, string> = {
-  macro: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
-  earnings: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  custom: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+  macro: 'bg-purple-500/12 text-purple-600 dark:text-purple-300',
+  earnings: 'bg-up-soft text-up',
+  custom: 'bg-accent text-accent-foreground',
 };
+const TYPE_DOT: Record<CalendarEventType, string> = {
+  macro: 'bg-purple-500',
+  earnings: 'bg-up',
+  custom: 'bg-primary',
+};
+const TYPE_LABEL: Record<CalendarEventType, string> = { macro: '거시', earnings: '실적', custom: '내 일정' };
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function pad(n: number): string {
@@ -129,54 +137,65 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
   for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, dateStr: `${year}-${pad(month + 1)}-${pad(d)}` });
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-4 rounded-2xl border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={() => changeMonth(-1)}>
-            ‹
+          <Button size="icon-sm" variant="outline" className="rounded-full" onClick={() => changeMonth(-1)} aria-label="이전 달">
+            <ChevronLeft />
           </Button>
-          <span className="min-w-28 text-center font-semibold tabular-nums">
+          <span className="min-w-28 text-center text-[15px] font-semibold tabular-nums">
             {year}년 {month + 1}월
           </span>
-          <Button size="sm" variant="ghost" onClick={() => changeMonth(1)}>
-            ›
+          <Button size="icon-sm" variant="outline" className="rounded-full" onClick={() => changeMonth(1)} aria-label="다음 달">
+            <ChevronRight />
           </Button>
         </div>
-        <Button size="sm" variant="outline" onClick={refresh} disabled={busy}>
-          {busy ? '갱신 중…' : '일정 갱신'}
-        </Button>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {(['macro', 'earnings', 'custom'] as CalendarEventType[]).map((t) => (
+            <span key={t} className="flex items-center gap-1.5">
+              <span className={`size-2 rounded-full ${TYPE_DOT[t]}`} /> {TYPE_LABEL[t]}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className="w-40" />
+          <Input
+            placeholder="일정 제목"
+            value={addTitle}
+            onChange={(e) => setAddTitle(e.target.value)}
+            className="w-40"
+            onKeyDown={(e) => e.key === 'Enter' && addEvent()}
+          />
+          <Button size="sm" onClick={addEvent} disabled={busy}>
+            <Plus data-icon="inline-start" /> 추가
+          </Button>
+          <Button size="sm" variant="outline" onClick={refresh} disabled={busy}>
+            <RefreshCw data-icon="inline-start" className={busy ? 'animate-spin' : ''} /> 일정 갱신
+          </Button>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className="w-40" />
-        <Input
-          placeholder="일정 제목"
-          value={addTitle}
-          onChange={(e) => setAddTitle(e.target.value)}
-          className="flex-1 min-w-40"
-          onKeyDown={(e) => e.key === 'Enter' && addEvent()}
-        />
-        <Button size="sm" onClick={addEvent} disabled={busy}>
-          추가
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border bg-border text-sm">
-        {WEEKDAYS.map((w) => (
-          <div key={w} className="bg-background py-1.5 text-center text-xs font-medium text-muted-foreground">
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border bg-border text-sm">
+        {WEEKDAYS.map((w, i) => (
+          <div
+            key={w}
+            className={`bg-secondary/60 py-2 text-center text-xs font-semibold ${
+              i === 0 ? 'text-up' : i === 6 ? 'text-down' : 'text-muted-foreground'
+            }`}
+          >
             {w}
           </div>
         ))}
         {cells.map((cell, i) => (
-          <div key={i} className="min-h-20 bg-background p-1">
+          <div key={i} className="min-h-24 bg-card p-1.5">
             {cell && (
               <>
-                <div className="mb-0.5 text-xs tabular-nums text-muted-foreground">{cell.day}</div>
-                <div className="space-y-0.5">
+                <div className="mb-1 text-[11.5px] font-medium tabular-nums text-muted-foreground">{cell.day}</div>
+                <div className="space-y-1">
                   {(eventsByDate.get(cell.dateStr) ?? []).slice(0, 3).map((e) => (
                     <div
                       key={e.id}
-                      className={`group flex items-center gap-1 truncate rounded px-1 py-0.5 text-[10px] ${TYPE_COLOR[e.type]}`}
+                      className={`group flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ${TYPE_COLOR[e.type]}`}
                       title={e.title}
                     >
                       <span className="truncate">

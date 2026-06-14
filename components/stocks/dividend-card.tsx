@@ -1,6 +1,8 @@
 'use client';
 
 // F15 배당 카드 — 수익률·DPS·주기·배당락/지급일 + 3년 추이 + 배당락 D-7 뱃지.
+// [재설계] 뱃지 톤·그리드 비주얼. [보존] FREQ_LABEL·dpsLabel·daysToNextExDate·yearly 계산·MiniBarChart·출처.
+import { Gift, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { Currency, DividendFrequency, DividendInfo } from '@/types';
 import { MiniBarChart } from '@/components/ui/mini-bar-chart';
@@ -49,28 +51,30 @@ export function DividendCard({ dividends, currency }: { dividends: DividendInfo[
   return (
     <div className="space-y-4">
       {dDay !== null && dDay <= 7 && (
-        <Badge variant="destructive">배당락 D-{dDay === 0 ? 'Day' : dDay}</Badge>
+        <Badge variant="outline" className="gap-1 border-0 bg-up-soft text-up">
+          <Gift className="size-3" /> 배당락 D-{dDay === 0 ? 'Day' : dDay}
+        </Badge>
       )}
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3.5">
         <div className="space-y-0.5">
-          <dt className="text-xs text-muted-foreground">배당수익률</dt>
+          <dt className="text-[11.5px] text-muted-foreground">배당수익률</dt>
           <dd className="text-sm font-medium tabular-nums">{latest.yieldAtRecord === null ? '—' : `${latest.yieldAtRecord}%`}</dd>
         </div>
         <div className="space-y-0.5">
-          <dt className="text-xs text-muted-foreground">주당 배당금</dt>
+          <dt className="text-[11.5px] text-muted-foreground">주당 배당금</dt>
           <dd className="text-sm font-medium tabular-nums">{dpsLabel(latest.dps, currency)}</dd>
         </div>
         <div className="space-y-0.5">
-          <dt className="text-xs text-muted-foreground">주기</dt>
+          <dt className="text-[11.5px] text-muted-foreground">주기</dt>
           <dd className="text-sm font-medium">{latest.frequency ? FREQ_LABEL[latest.frequency] : '—'}</dd>
         </div>
         <div className="space-y-0.5">
-          <dt className="text-xs text-muted-foreground">직전 배당락일</dt>
+          <dt className="text-[11.5px] text-muted-foreground">직전 배당락일</dt>
           <dd className="text-sm font-medium tabular-nums">{latest.exDate ?? '—'}</dd>
         </div>
         {latest.payDate && (
           <div className="space-y-0.5">
-            <dt className="text-xs text-muted-foreground">지급일</dt>
+            <dt className="text-[11.5px] text-muted-foreground">지급일</dt>
             <dd className="text-sm font-medium tabular-nums">{latest.payDate}</dd>
           </div>
         )}
@@ -88,7 +92,9 @@ export function DividendCard({ dividends, currency }: { dividends: DividendInfo[
           />
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">출처: {latest.source.toUpperCase()}</p>
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <Clock className="size-3" /> 출처: {latest.source.toUpperCase()}
+      </p>
     </div>
   );
 }
