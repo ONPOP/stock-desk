@@ -1,0 +1,287 @@
+// 공통 도메인 타입 — PRD 9장 데이터 모델 기준
+
+export type Market = 'KOSPI' | 'KOSDAQ' | 'NYSE' | 'NASDAQ' | 'AMEX';
+export type Currency = 'KRW' | 'USD';
+export type CandleInterval = '1m' | '1d' | '1w';
+
+export interface Stock {
+  id: string;
+  ticker: string;
+  name_kr: string | null;
+  name_en: string | null;
+  market: Market;
+  currency: Currency;
+  sector: string | null;
+  /** 거래정지·상폐 시 false (PRD 13장 — 뱃지·갱신 중단). 미조회 시 undefined */
+  is_active?: boolean;
+}
+
+/** 현재가 스냅샷 — 금액은 최소 통화 단위 정수 (KRW: 원, USD: 센트) */
+export interface Quote {
+  ticker: string;
+  market: Market;
+  currency: Currency;
+  /** 현재가 (최소 단위 정수) */
+  price: number;
+  /** 전일 대비 (최소 단위 정수, 음수 가능) */
+  change: number;
+  /** 등락률(%) 문자열 그대로 보존 — 부동소수점 연산 금지 */
+  changeRate: string;
+  volume: number;
+  /** 시세 기준 시각 (UTC ISO) */
+  asOf: string;
+}
+
+/** 캔들 — 가격은 최소 통화 단위 정수 */
+export interface Candle {
+  ts: string; // UTC ISO
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  volume: number;
+}
+
+export interface StockSearchResult {
+  ticker: string;
+  name_kr: string | null;
+  name_en: string | null;
+  market: Market;
+  currency: Currency;
+}
+
+/** 워치리스트 항목 — 종목 정보 + 그룹/자동분석 플래그 */
+export interface WatchlistItem {
+  stock_id: string;
+  ticker: string;
+  name_kr: string | null;
+  name_en: string | null;
+  market: Market;
+  currency: Currency;
+  group_name: string;
+  auto_analysis: boolean;
+}
+
+/** 시장 위젯(F11) 지수/환율/금리 — 표시값(금액 아님) */
+export interface MarketIndex {
+  key: string;
+  label: string;
+  value: number;
+  change: number;
+  changeRate: string;
+  unit: '' | '%' | '원';
+}
+
+export interface UserSettingsView {
+  /** 키는 마스킹된 형태로만 클라이언트에 전달 (예: "PSxx****xxQz") */
+  kis_app_key_masked: string | null;
+  kis_app_secret_set: boolean;
+  openai_key_masked: string | null;
+  anthropic_key_masked: string | null;
+  /** 데이터 소스 키 (W3) — DART(한국)·Finnhub(미국 재무)·FMP(미국 배당) */
+  dart_key_masked: string | null;
+  finnhub_key_masked: string | null;
+  fmp_key_masked: string | null;
+  /** 네이버 뉴스 검색 API (W4, 한국 뉴스) */
+  naver_client_id_masked: string | null;
+  naver_client_secret_set: boolean;
+  seed_krw: number;
+  seed_usd_cents: number;
+}
+
+// ───────────────────────── 펀더멘털 (W3) ─────────────────────────
+
+export type FundamentalsSource = 'dart' | 'finnhub' | 'fmp' | 'edgar' | 'kis';
+export type DividendFrequency = 'annual' | 'semiannual' | 'quarterly' | 'monthly';
+
+/**
+ * 종목 핵심 지표 (F4). 금액은 최소 통화 단위 정수(KRW=원, USD=센트).
+ * 비율(per/pbr/roe/dividendYield/debtRatio)·eps는 표시용 수치 그대로(부동소수점 연산 금지).
+ * 분기 시계열은 fiscalQuarter로 구분된 여러 행으로 표현(stock_metrics).
+ */
+export interface StockMetrics {
+  marketCap: number | null;
+  per: number | null;
+  pbr: number | null;
+  roe: number | null;
+  eps: number | null;
+  revenueQ: number | null;
+  operatingIncomeQ: number | null;
+  netIncomeQ: number | null;
+  capex: number | null;
+  debtRatio: number | null;
+  dividendYield: number | null;
+  /** 회계 분기 라벨 (예: "2024Q3") */
+  fiscalQuarter: string | null;
+  /** 기준일 (YYYY-MM-DD) */
+  asOfDate: string;
+  source: FundamentalsSource;
+}
+
+/** 배당 정보 (F15). dps는 표시용 수치(주당 배당금). */
+export interface DividendInfo {
+  fiscalYear: number;
+  dps: number | null;
+  frequency: DividendFrequency | null;
+  /** 배당락일 (YYYY-MM-DD) */
+  exDate: string | null;
+  /** 지급일 (YYYY-MM-DD) */
+  payDate: string | null;
+  yieldAtRecord: number | null;
+  source: FundamentalsSource;
+}
+
+/** 공시 항목 (F12). summary_ai는 W3에서 비움(W4 통합). */
+export interface DisclosureItem {
+  source: 'dart' | 'edgar';
+  /** 원문 양식 코드 (예: "8-K", DART 보고서명) */
+  formType: string;
+  /** 한국어 유형 라벨 (예: "실적", "유상증자") */
+  typeLabelKr: string | null;
+  title: string;
+  /** 제출 시각 (UTC ISO) */
+  filedAt: string;
+  url: string;
+  summaryAi?: string | null;
+}
+
+// ───────────────────────── 뉴스·브리핑 (W4) ─────────────────────────
+
+export type Sentiment = 'positive' | 'negative' | 'neutral';
+
+/** Provider가 반환하는 원시 뉴스 (요약·감성 전) */
+export interface NewsItemRaw {
+  title: string;
+  url: string;
+  source: string | null;
+  /** 발행 시각 (UTC ISO) */
+  publishedAt: string | null;
+  /** 요약 입력용 본문/설명 (있으면) */
+  body?: string | null;
+}
+
+/** F5 뉴스 카드 — AI 요약·감성·클러스터 포함 */
+export interface NewsItem extends NewsItemRaw {
+  summaryAi: string | null;
+  sentiment: Sentiment | null;
+  clusterId: string | null;
+}
+
+/** F1 데일리 브리핑 */
+export interface Briefing {
+  date: string;
+  contentMd: string | null;
+  generatedAt: string;
+  status: 'success' | 'failed' | 'generating';
+}
+
+// ───────────────────────── 노트·사용량 (W5) ─────────────────────────
+
+/** F13 투자 노트 */
+export interface Note {
+  id: string;
+  stockId: string | null;
+  /** 표시용 종목명·티커 (조인) */
+  stockName: string | null;
+  stockTicker: string | null;
+  contentMd: string;
+  attachedAnalysisId: string | null;
+  attachedTradeId: string | null;
+  createdAt: string;
+}
+
+// ───────────────────────── 종목 비교 (V2 F16) ─────────────────────────
+
+export interface CompareItem {
+  stockId: string;
+  ticker: string;
+  name: string;
+  currency: Currency;
+  metrics: StockMetrics | null;
+}
+
+// ───────────────────────── 모의투자 (V1 F9) ─────────────────────────
+
+export interface PaperAccount {
+  currency: Currency;
+  /** 현금 잔고 (최소 단위 정수) */
+  cashBalance: number;
+}
+
+export interface PaperPosition {
+  stockId: string;
+  ticker: string;
+  name: string;
+  market: Market;
+  currency: Currency;
+  qty: number;
+  /** 평단가 (최소 단위 정수) */
+  avgPrice: number | null;
+}
+
+export interface PaperTrade {
+  id: string;
+  ticker: string;
+  name: string;
+  side: 'buy' | 'sell';
+  qty: number;
+  price: number | null;
+  currency: Currency;
+  orderType: 'market' | 'reserved';
+  status: 'pending' | 'done' | 'canceled';
+  memo: string | null;
+  createdAt: string;
+  executedAt: string | null;
+}
+
+export interface PaperState {
+  seasonNo: number;
+  accounts: PaperAccount[];
+  positions: PaperPosition[];
+  trades: PaperTrade[];
+}
+
+// ───────────────────────── AI 분석 (V1 F7) ─────────────────────────
+
+export type AnalysisPosition = 'buy' | 'neutral' | 'sell';
+
+export interface AiAnalysis {
+  id: string;
+  model: 'gpt' | 'claude';
+  triggerType: 'auto' | 'manual';
+  resultMd: string | null;
+  position: AnalysisPosition | null;
+  confidence: number | null;
+  createdAt: string;
+}
+
+// ───────────────────────── 캘린더 (V1 F2) ─────────────────────────
+
+export type CalendarEventType = 'macro' | 'earnings' | 'custom';
+
+export interface CalendarEvent {
+  id: string;
+  type: CalendarEventType;
+  stockId: string | null;
+  title: string;
+  /** YYYY-MM-DD */
+  eventDate: string;
+  /** false = "(예정)" 라벨 */
+  confirmed: boolean;
+  source: string | null;
+  memo: string | null;
+}
+
+/** API 사용량 집계 1행 */
+export interface UsageRow {
+  provider: string;
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+/** 사용량 요약 (오늘·이번달) */
+export interface UsageSummary {
+  today: UsageRow[];
+  month: UsageRow[];
+}

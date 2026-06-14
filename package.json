@@ -1,27 +1,99 @@
 {
-  "name": "stock-desk-scaffold",
+  "name": "stock-desk",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "tsx scripts/apply-migrations.ts",
+    "verify:kis": "tsx scripts/verify-kis.ts",
+    "create:user": "tsx scripts/create-user.ts",
+    "sync:master": "tsx scripts/sync-stock-master.ts",
+    "sync:cik": "tsx scripts/sync-cik.ts",
+    "sync:corp-codes": "tsx scripts/sync-corp-codes.ts",
+    "verify:fundamentals": "tsx scripts/verify-fundamentals.ts",
+    "verify:news": "tsx scripts/verify-news.ts",
+    "dev:e2e": "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-https://dummy-project.supabase.co} NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-dummy-anon-key} next dev --port 3457",
+    "app:build": "next build && node scripts/electron-prepare.js",
+    "app:start": "electron .",
+    "app:dev": "npm run app:build && electron .",
+    "app:dist": "npm run app:build && electron-builder --mac dmg"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.71",
+    "@base-ui/react": "^1.5.0",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "ai": "^6.0.204",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "decimal.js": "^10.6.0",
+    "fflate": "^0.8.3",
+    "lightweight-charts": "^5.2.0",
+    "lucide-react": "^1.18.0",
+    "next": "15.5.19",
+    "next-themes": "^0.4.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.19"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "server-only": "^0.0.1",
+    "shadcn": "^4.11.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "dotenv": "^17.4.2",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "15.5.19",
-    "@eslint/eslintrc": "^3"
+    "postgres": "^3.4.9",
+    "tailwindcss": "^4",
+    "tsx": "^4.22.4",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "build": {
+    "appId": "com.stockdesk.app",
+    "productName": "Stock Desk",
+    "electronVersion": "42.4.0",
+    "afterPack": "scripts/electron-after-pack.js",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist-electron"
+    },
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "standalone"
+      },
+      {
+        "from": ".env.local",
+        "to": "app.env"
+      }
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.finance",
+      "identity": null
+    }
   }
 }
