@@ -315,7 +315,7 @@ export interface PaperTrade {
   qty: number;
   price: number | null;
   currency: Currency;
-  orderType: 'market' | 'reserved';
+  orderType: 'market' | 'reserved' | 'limit';
   status: 'pending' | 'done' | 'canceled';
   memo: string | null;
   createdAt: string;

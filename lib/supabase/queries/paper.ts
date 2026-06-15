@@ -73,6 +73,19 @@ export async function getAccount(
   return data ? { id: data.id, cashBalance: num(data.cash_balance) } : null;
 }
 
+/** accountId로 잔고 조회 — 지정가 체결 시 최신 잔고 확인용 */
+export async function getAccountById(
+  db: SupabaseClient,
+  accountId: string,
+): Promise<{ id: string; cashBalance: number } | null> {
+  const { data } = await db
+    .from('paper_accounts')
+    .select('id, currency, cash_balance')
+    .eq('id', accountId)
+    .maybeSingle<AccountRow>();
+  return data ? { id: data.id, cashBalance: num(data.cash_balance) } : null;
+}
+
 export async function setCash(db: SupabaseClient, accountId: string, newCash: number): Promise<void> {
   const { error } = await db.from('paper_accounts').update({ cash_balance: newCash }).eq('id', accountId);
   if (error) throw new Error(`잔고 갱신 실패: ${error.message}`);
@@ -96,7 +109,7 @@ export async function insertTrade(
     side: 'buy' | 'sell';
     qty: number;
     price: number | null;
-    orderType: 'market' | 'reserved';
+    orderType: 'market' | 'reserved' | 'limit';
     status: 'pending' | 'done';
     memo?: string | null;
     executedAt?: string | null;
@@ -116,6 +129,92 @@ export async function insertTrade(
     reserved_at: input.reservedAt ?? null,
   });
   if (error) throw new Error(`주문 기록 실패: ${error.message}`);
+}
+
+export interface PendingLimitOrder {
+  tradeId: string;
+  accountId: string;
+  stockId: string;
+  ticker: string;
+  market: Market;
+  currency: Currency;
+  side: 'buy' | 'sell';
+  qty: number;
+  limitPrice: number;
+}
+
+/** 본인의 pending 지정가 주문 목록 — 체결 감시용 (RLS로 본인 행만). */
+export async function listPendingLimitOrders(
+  db: SupabaseClient,
+  userId: string,
+): Promise<PendingLimitOrder[]> {
+  // RLS(trades_select)가 본인 계좌 거래만 노출하나, season→user_id를 명시해 이중 방어.
+  const { data, error } = await db
+    .from('paper_trades')
+    .select(
+      'id, account_id, side, qty, price, stock_id, stocks!inner(ticker, market, currency), paper_accounts!inner(season_id, paper_seasons!inner(user_id))',
+    )
+    .eq('status', 'pending')
+    .eq('order_type', 'limit')
+    .eq('paper_accounts.paper_seasons.user_id', userId);
+  if (error) throw new Error(`지정가 주문 조회 실패: ${error.message}`);
+
+  type Row = {
+    id: string;
+    account_id: string;
+    side: string;
+    qty: number | string;
+    price: number | string | null;
+    stock_id: string;
+    stocks: { ticker: string; market: string; currency: string } | null;
+  };
+  return ((data ?? []) as unknown as Row[])
+    .filter((r) => r.stocks && r.price != null)
+    .map((r) => ({
+      tradeId: r.id,
+      accountId: r.account_id,
+      stockId: r.stock_id,
+      ticker: r.stocks!.ticker,
+      market: r.stocks!.market as Market,
+      currency: r.stocks!.currency as Currency,
+      side: r.side as 'buy' | 'sell',
+      qty: num(r.qty),
+      limitPrice: num(r.price),
+    }));
+}
+
+/**
+ * 예약(pending) 주문을 체결 처리 — status='done' + executed_at + price(체결가).
+ * status='pending' 조건으로 한 번만 전이(중복 체결 방지). 반환 false면 이미 처리된 행.
+ */
+export async function fillTrade(
+  db: SupabaseClient,
+  tradeId: string,
+  executedAt: string,
+  fillPrice: number,
+): Promise<boolean> {
+  const { data, error } = await db
+    .from('paper_trades')
+    .update({ status: 'done', executed_at: executedAt, price: fillPrice })
+    .eq('id', tradeId)
+    .eq('status', 'pending') // 이미 체결·취소된 행은 보호
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`체결 처리 실패: ${error.message}`);
+  return data != null;
+}
+
+/** 예약(pending) 주문 취소 — status='canceled'. pending이 아니면 false. */
+export async function cancelTrade(db: SupabaseClient, tradeId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from('paper_trades')
+    .update({ status: 'canceled' })
+    .eq('id', tradeId)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`주문 취소 실패: ${error.message}`);
+  return data != null;
 }
 
 export async function archiveSeason(db: SupabaseClient, seasonId: string, endedAt: string): Promise<void> {
