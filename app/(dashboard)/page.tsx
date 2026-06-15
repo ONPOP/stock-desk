@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { MarketWidget } from '@/components/dashboard/market-widget';
 import { BriefingCard } from '@/components/dashboard/briefing-card';
-import { StatTiles } from '@/components/dashboard/stat-tiles';
+import { PortfolioOverview } from '@/components/dashboard/portfolio-overview';
 import { WatchlistTiles } from '@/components/dashboard/watchlist-tiles';
 import { AnalysesTile } from '@/components/dashboard/analyses-tile';
 import { ScheduleTile } from '@/components/dashboard/schedule-tile';
@@ -13,6 +13,7 @@ import { listWatchlist } from '@/lib/supabase/queries/watchlist';
 import { listRecentAnalyses } from '@/lib/supabase/queries/analyses';
 import { listEvents } from '@/lib/supabase/queries/calendar';
 import { listAllTrades } from '@/lib/supabase/queries/real-trades';
+import { computeHoldings, computeRealized } from '@/lib/utils/portfolio';
 
 export default async function DashboardPage() {
   const { supabase, user } = await requireUser();
@@ -40,7 +41,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <StatTiles watchCount={watchlist.length} analyses={analyses} events={events} trades={trades} />
+      <PortfolioOverview holdings={computeHoldings(trades)} realized={computeRealized(trades)} />
 
       <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <WatchlistTiles items={watchlist} />
