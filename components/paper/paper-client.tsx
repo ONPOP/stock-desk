@@ -368,17 +368,45 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
             <p className="text-sm text-muted-foreground">보유 종목이 없습니다.</p>
           ) : (
             <ul className="divide-y">
-              {state.positions.map((p) => (
-                <li key={p.stockId} className="flex items-center gap-2.5 py-2.5 text-sm">
-                  <CompanyLogo ticker={p.ticker} name={p.name} size={30} />
-                  <div className="min-w-0">
-                    <div className="font-medium">{p.name}</div>
-                    <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                      {p.qty.toLocaleString()}주 · 평단 {p.avgPrice != null ? formatMoney(p.avgPrice, p.currency) : '—'}
+              {state.positions.map((p) => {
+                const h = holdings.find((x) => x.stockId === p.stockId);
+                const price = priceMap[p.stockId];
+                const ev = h && price != null ? evalHolding(h, price) : null;
+                const cls = ev
+                  ? ev.evalPnl > 0
+                    ? 'text-up'
+                    : ev.evalPnl < 0
+                      ? 'text-down'
+                      : 'text-muted-foreground'
+                  : '';
+                return (
+                  <li key={p.stockId} className="flex items-center gap-2.5 py-2.5 text-sm">
+                    <CompanyLogo ticker={p.ticker} name={p.name} size={30} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">{p.name}</div>
+                      <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {p.qty.toLocaleString()}주 · 평단 {p.avgPrice != null ? formatMoney(p.avgPrice, p.currency) : '—'}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                    <div className="shrink-0 text-right">
+                      {ev ? (
+                        <>
+                          <div className={`text-[13px] font-semibold tabular-nums ${cls}`}>
+                            {ev.evalPnl > 0 ? '+' : ''}
+                            {formatMoney(ev.evalPnl, p.currency)}
+                          </div>
+                          <div className={`font-mono text-[11px] tabular-nums ${cls}`}>
+                            {ev.evalRate > 0 ? '+' : ''}
+                            {ev.evalRate}%
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

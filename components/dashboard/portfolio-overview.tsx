@@ -168,7 +168,16 @@ export function PortfolioOverview({ holdings, realized }: { holdings: RealHoldin
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={bars} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="ticker" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" interval={0} angle={bars.length > 6 ? -30 : 0} textAnchor={bars.length > 6 ? 'end' : 'middle'} height={bars.length > 6 ? 36 : 20} />
+                    <XAxis
+                      dataKey="name"
+                      tickFormatter={(v) => (String(v).length > 6 ? `${String(v).slice(0, 6)}…` : String(v))}
+                      tick={{ fontSize: 10 }}
+                      stroke="var(--muted-foreground)"
+                      interval={0}
+                      angle={bars.length > 4 ? -30 : 0}
+                      textAnchor={bars.length > 4 ? 'end' : 'middle'}
+                      height={bars.length > 4 ? 46 : 22}
+                    />
                     <YAxis tickFormatter={(v) => formatCompactMoney(Number(v), 'KRW')} tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" width={52} />
                     <Tooltip formatter={(v) => signedKrw(Number(v) || 0)} contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'var(--muted)' }} />
                     <Bar dataKey="pnl" radius={[3, 3, 0, 0]}>
