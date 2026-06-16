@@ -6,6 +6,8 @@ import type { Currency, Market, PaperState, PaperTrade } from '@/types';
 interface SeasonRow {
   id: string;
   season_no: number;
+  start_date: string | null;
+  end_date: string | null;
 }
 interface AccountRow {
   id: string;
@@ -16,16 +18,19 @@ interface AccountRow {
 const num = (v: number | string | null | undefined) => (v == null ? 0 : Number(v));
 
 /** 활성 시즌 보장 — 없으면 user_settings 시드로 시즌+계좌 생성 */
-export async function ensureSeason(db: SupabaseClient, userId: string): Promise<{ id: string; seasonNo: number }> {
+type SeasonHandle = { id: string; seasonNo: number; startDate: string | null; endDate: string | null };
+
+export async function ensureSeason(db: SupabaseClient, userId: string): Promise<SeasonHandle> {
   const { data: existing } = await db
     .from('paper_seasons')
-    .select('id, season_no')
+    .select('id, season_no, start_date, end_date')
     .eq('user_id', userId)
     .is('ended_at', null)
     .order('season_no', { ascending: false })
     .limit(1)
     .maybeSingle<SeasonRow>();
-  if (existing) return { id: existing.id, seasonNo: existing.season_no };
+  if (existing)
+    return { id: existing.id, seasonNo: existing.season_no, startDate: existing.start_date, endDate: existing.end_date };
 
   const { data: settings } = await db
     .from('user_settings')
@@ -47,7 +52,7 @@ export async function ensureSeason(db: SupabaseClient, userId: string): Promise<
   const { data: season, error } = await db
     .from('paper_seasons')
     .insert({ user_id: userId, season_no: seasonNo, seed_krw: seedKrw, seed_usd_cents: seedUsd })
-    .select('id, season_no')
+    .select('id, season_no, start_date, end_date')
     .single<SeasonRow>();
   if (error || !season) throw new Error(`시즌 생성 실패: ${error?.message}`);
 
@@ -56,7 +61,65 @@ export async function ensureSeason(db: SupabaseClient, userId: string): Promise<
     { season_id: season.id, currency: 'USD', cash_balance: seedUsd },
   ]);
   if (accErr) throw new Error(`계좌 생성 실패: ${accErr.message}`);
-  return { id: season.id, seasonNo: season.season_no };
+  return { id: season.id, seasonNo: season.season_no, startDate: season.start_date, endDate: season.end_date };
+}
+
+/**
+ * 새 시즌 시작 — 현재 활성 시즌 종료(아카이브) 후 지정 시드·기간으로 새 시즌 생성.
+ * 시드는 user_settings에도 반영해 이후 자동 생성과 일관성을 맞춘다. 기간은 표시·기록용.
+ */
+export async function startNewSeason(
+  db: SupabaseClient,
+  userId: string,
+  opts: { seedKrw: number; seedUsdCents: number; startDate?: string | null; endDate?: string | null },
+  endedAt: string,
+): Promise<void> {
+  await db
+    .from('user_settings')
+    .update({ seed_krw: opts.seedKrw, seed_usd_cents: opts.seedUsdCents })
+    .eq('user_id', userId);
+
+  const { data: active } = await db
+    .from('paper_seasons')
+    .select('id')
+    .eq('user_id', userId)
+    .is('ended_at', null)
+    .order('season_no', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (active) {
+    const { error } = await db.from('paper_seasons').update({ ended_at: endedAt }).eq('id', active.id);
+    if (error) throw new Error(`시즌 종료 실패: ${error.message}`);
+  }
+
+  const { data: maxRow } = await db
+    .from('paper_seasons')
+    .select('season_no')
+    .eq('user_id', userId)
+    .order('season_no', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ season_no: number }>();
+  const seasonNo = (maxRow?.season_no ?? 0) + 1;
+
+  const { data: season, error } = await db
+    .from('paper_seasons')
+    .insert({
+      user_id: userId,
+      season_no: seasonNo,
+      seed_krw: opts.seedKrw,
+      seed_usd_cents: opts.seedUsdCents,
+      start_date: opts.startDate ?? null,
+      end_date: opts.endDate ?? null,
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (error || !season) throw new Error(`시즌 생성 실패: ${error?.message}`);
+
+  const { error: accErr } = await db.from('paper_accounts').insert([
+    { season_id: season.id, currency: 'KRW', cash_balance: opts.seedKrw },
+    { season_id: season.id, currency: 'USD', cash_balance: opts.seedUsdCents },
+  ]);
+  if (accErr) throw new Error(`계좌 생성 실패: ${accErr.message}`);
 }
 
 export async function getAccount(
@@ -268,6 +331,8 @@ export async function getPaperState(db: SupabaseClient, userId: string): Promise
 
   return {
     seasonNo: season.seasonNo,
+    seasonStartDate: season.startDate,
+    seasonEndDate: season.endDate,
     accounts: accounts.map((a) => ({ currency: a.currency as Currency, cashBalance: num(a.cash_balance) })),
     positions: ((posRows ?? []) as unknown as PosRow[])
       .filter((p) => p.stocks)

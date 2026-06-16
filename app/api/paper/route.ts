@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 import { toErrorResponse, ValidationError } from '@/lib/errors';
 import { requireUser } from '@/lib/supabase/server';
 import { getStock } from '@/lib/supabase/queries/stocks';
-import { getPaperState, cancelTrade } from '@/lib/supabase/queries/paper';
-import { placeOrder, resetSeason } from '@/lib/services/paper';
-import { orderSchema, cancelSchema } from '@/lib/validation/paper';
+import { getPaperState, cancelTrade, startNewSeason } from '@/lib/supabase/queries/paper';
+import { placeOrder } from '@/lib/services/paper';
+import { orderSchema, cancelSchema, newSeasonSchema } from '@/lib/validation/paper';
 
 export async function GET() {
   try {
@@ -21,7 +21,21 @@ export async function POST(req: Request) {
   try {
     const { supabase, user } = await requireUser();
     if (new URL(req.url).searchParams.get('reset') === 'true') {
-      await resetSeason(supabase, user.id);
+      const seasonJson = await req.json().catch(() => null);
+      const seasonParsed = newSeasonSchema.safeParse(seasonJson);
+      if (!seasonParsed.success)
+        throw new ValidationError(seasonParsed.error.issues[0]?.message ?? '시즌 설정값이 올바르지 않습니다.');
+      await startNewSeason(
+        supabase,
+        user.id,
+        {
+          seedKrw: seasonParsed.data.seedKrw,
+          seedUsdCents: Math.round(seasonParsed.data.seedUsd * 100),
+          startDate: seasonParsed.data.startDate ?? null,
+          endDate: seasonParsed.data.endDate ?? null,
+        },
+        new Date().toISOString(),
+      );
       return NextResponse.json({ state: await getPaperState(supabase, user.id), reset: true });
     }
     const json = await req.json().catch(() => null);

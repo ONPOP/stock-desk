@@ -3,18 +3,22 @@
 // F9 모의투자 — 계좌 요약 + 포지션 카드 + 주문 폼 + 거래 타임라인 + 시즌 리셋.
 // 시장가=장중 즉시·장외 시초가 예약, 지정가=조건 도달 시 체결(예약 후 감시). 금액은 최소 단위 정수.
 // 주문 폼에 실시간 시장가 표시·지정가 입력·예상금액, 거래내역에 예약 취소 버튼.
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { CompanyLogo } from '@/components/ui/company-logo';
+import { StockPicker, type SelectedStock } from './stock-picker';
+import { NewSeasonDialog, type NewSeasonValues } from './new-season-dialog';
+import { PortfolioSummaryBar, type AllocationSlice } from '@/components/stocks/portfolio-summary-bar';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
+import { summarizePortfolio, evalHolding } from '@/lib/utils/portfolio';
 import { formatMoney, minorToMajorNumber } from '@/lib/utils/money';
-import type { Currency, Market, PaperState } from '@/types';
+import type { Currency, Market, PaperPosition, PaperState, RealHolding } from '@/types';
 
-const MARKETS: Market[] = ['KOSPI', 'KOSDAQ', 'NYSE', 'NASDAQ', 'AMEX'];
 const KRW_MARKETS: Market[] = ['KOSPI', 'KOSDAQ'];
 
 type OrderType = 'market' | 'limit';
@@ -28,20 +32,30 @@ function toMinorApprox(input: string, currency: Currency): number {
 
 export function PaperClient({ initialState }: { initialState: PaperState }) {
   const [state, setState] = useState<PaperState>(initialState);
-  const [ticker, setTicker] = useState('');
-  const [market, setMarket] = useState<Market>('KOSPI');
+  const [selected, setSelected] = useState<SelectedStock | null>(null);
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showNewSeason, setShowNewSeason] = useState(false);
+  const [priceMap, setPriceMap] = useState<Record<string, number>>({});
 
+  const ticker = selected?.ticker ?? '';
+  const market: Market = selected?.market ?? 'KOSPI';
   const currency: Currency = KRW_MARKETS.includes(market) ? 'KRW' : 'USD';
   const symbol = currency === 'USD' ? '$' : '₩';
 
-  // 실시간 시장가 — 티커가 입력됐을 때만 폴링
-  const { quote, loading: quoteLoading, error: quoteError } = useQuote(ticker.trim().toUpperCase(), market, {
-    enabled: ticker.trim().length > 0,
+  const { usdKrw, ready } = useUsdKrw();
+  const handlePrice = useCallback(
+    (stockId: string, priceMinor: number) =>
+      setPriceMap((prev) => (prev[stockId] === priceMinor ? prev : { ...prev, [stockId]: priceMinor })),
+    [],
+  );
+
+  // 실시간 시장가 — 종목이 선택됐을 때만 폴링
+  const { quote, loading: quoteLoading, error: quoteError } = useQuote(ticker, market, {
+    enabled: !!selected,
   });
 
   // 예상 주문금액(수량 × 단가) — 지정가는 입력값, 시장가는 현재가 기준
@@ -63,6 +77,44 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
   const hasPendingLimit = useMemo(
     () => state.trades.some((t) => t.status === 'pending' && t.orderType === 'limit'),
     [state.trades],
+  );
+
+  // 보유 종목 평가 — PaperPosition을 RealHolding으로 보고 현재가(priceMap) 기준 요약
+  const holdings = useMemo<RealHolding[]>(
+    () =>
+      state.positions
+        .filter((p) => p.qty > 0)
+        .map((p) => {
+          const avg = p.avgPrice ?? 0;
+          return {
+            stockId: p.stockId,
+            ticker: p.ticker,
+            name: p.name,
+            market: p.market,
+            currency: p.currency,
+            qty: p.qty,
+            avgBuyPrice: avg,
+            buyAmount: avg * p.qty,
+            realizedPnl: 0,
+          };
+        }),
+    [state.positions],
+  );
+  const summary = useMemo(
+    () => summarizePortfolio(holdings, priceMap, [], ready ? usdKrw : 0),
+    [holdings, priceMap, ready, usdKrw],
+  );
+  const allocation = useMemo<AllocationSlice[]>(
+    () =>
+      holdings
+        .map((h) => {
+          const price = priceMap[h.stockId];
+          const value = price != null ? evalHolding(h, price).currentValue : h.buyAmount;
+          const krw = h.currency === 'USD' ? Math.round((value / 100) * (ready ? usdKrw : 0)) : value;
+          return { name: h.name, value: krw };
+        })
+        .filter((s) => s.value > 0),
+    [holdings, priceMap, ready, usdKrw],
   );
 
   // 지정가 예약 체결 감시 — pending 지정가가 있을 때만 8초 주기로 트리거
@@ -91,7 +143,7 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
 
   async function submit() {
     const q = Number(qty);
-    if (!ticker.trim() || !Number.isInteger(q) || q <= 0) {
+    if (!selected || !Number.isInteger(q) || q <= 0) {
       toast.error('종목과 수량을 올바르게 입력해주세요.');
       return;
     }
@@ -156,17 +208,26 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
     }
   }
 
-  async function reset() {
-    if (!confirm('현재 시즌을 종료하고 시드머니를 초기화할까요? (이전 시즌은 아카이브됩니다)')) return;
+  async function submitNewSeason(v: NewSeasonValues) {
     setBusy(true);
     try {
-      const res = await fetch('/api/paper?reset=true', { method: 'POST' });
+      const res = await fetch('/api/paper?reset=true', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          seedKrw: v.seedKrw,
+          seedUsd: v.seedUsd,
+          ...(v.startDate ? { startDate: v.startDate } : {}),
+          ...(v.endDate ? { endDate: v.endDate } : {}),
+        }),
+      });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? '리셋 실패');
+        toast.error(data.error ?? '시즌 시작에 실패했습니다.');
         return;
       }
       setState(data.state);
+      setShowNewSeason(false);
       toast.success('새 시즌을 시작했습니다.');
     } catch {
       toast.error('네트워크 오류');
@@ -179,9 +240,16 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
     <div className="space-y-5">
       {/* 계좌 요약 타일 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Badge variant="outline" className="border-0 bg-accent text-accent-foreground">시즌 {state.seasonNo}</Badge>
-        <Button variant="outline" size="sm" onClick={reset} disabled={busy}>
-          시즌 리셋
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="border-0 bg-accent text-accent-foreground">시즌 {state.seasonNo}</Badge>
+          {(state.seasonStartDate || state.seasonEndDate) && (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {state.seasonStartDate ?? '—'} ~ {state.seasonEndDate ?? '—'}
+            </span>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setShowNewSeason(true)} disabled={busy}>
+          새 시즌 시작
         </Button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -220,27 +288,14 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input placeholder="티커 (예: 005930, AAPL)" value={ticker} onChange={(e) => setTicker(e.target.value)} />
-            <select
-              value={market}
-              onChange={(e) => setMarket(e.target.value as Market)}
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              {MARKETS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
+          <StockPicker selected={selected} onSelect={setSelected} onClear={() => setSelected(null)} />
 
           {/* 실시간 시장가 */}
           <div className="flex items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm">
             <span className="text-muted-foreground">실시간 시장가</span>
             <span className="font-mono font-semibold tabular-nums">
-              {!ticker.trim()
-                ? '종목 입력'
+              {!selected
+                ? '종목 선택'
                 : quote
                   ? formatMoney(quote.price, currency)
                   : quoteError
@@ -370,6 +425,36 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
           </ul>
         )}
       </Card>
+
+      {/* 보유 종목 현재가 폴링(숨김) → 하단 수익 요약바 */}
+      {state.positions.map((p) => (
+        <PositionPricePoller key={p.stockId} position={p} onPrice={handlePrice} />
+      ))}
+      {holdings.length > 0 && <PortfolioSummaryBar summary={summary} allocation={allocation} ready={ready} />}
+
+      {showNewSeason && (
+        <NewSeasonDialog
+          defaultKrw={10_000_000}
+          defaultUsd={10_000}
+          busy={busy}
+          onClose={() => setShowNewSeason(false)}
+          onSubmit={submitNewSeason}
+        />
+      )}
     </div>
   );
+}
+
+function PositionPricePoller({
+  position,
+  onPrice,
+}: {
+  position: PaperPosition;
+  onPrice: (stockId: string, priceMinor: number) => void;
+}) {
+  const { quote } = useQuote(position.ticker, position.market, { enabled: true });
+  useEffect(() => {
+    if (quote) onPrice(position.stockId, quote.price);
+  }, [quote, position.stockId, onPrice]);
+  return null;
 }

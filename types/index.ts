@@ -324,6 +324,8 @@ export interface PaperTrade {
 
 export interface PaperState {
   seasonNo: number;
+  seasonStartDate: string | null; // 시즌 목표 시작일 "YYYY-MM-DD"
+  seasonEndDate: string | null; // 시즌 목표 종료일 "YYYY-MM-DD"
   accounts: PaperAccount[];
   positions: PaperPosition[];
   trades: PaperTrade[];

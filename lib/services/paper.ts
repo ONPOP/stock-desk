@@ -18,7 +18,6 @@ import {
   insertTrade,
   fillTrade,
   listPendingLimitOrders,
-  archiveSeason,
 } from '@/lib/supabase/queries/paper';
 
 export interface OrderResult {
@@ -190,11 +189,4 @@ export async function checkLimitOrders(
     }
   }
   return { filled };
-}
-
-/** 시즌 리셋 — 현재 시즌 아카이브 후 새 시즌 생성(D5) */
-export async function resetSeason(db: SupabaseClient, userId: string, now: Date = new Date()): Promise<void> {
-  const season = await ensureSeason(db, userId);
-  await archiveSeason(db, season.id, now.toISOString());
-  await ensureSeason(db, userId); // 새 시즌 생성
 }

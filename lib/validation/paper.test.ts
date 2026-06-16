@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { orderSchema, cancelSchema } from './paper';
+import { orderSchema, cancelSchema, newSeasonSchema } from './paper';
 
 describe('orderSchema', () => {
   it('정상 매수/매도', () => {
@@ -36,5 +36,33 @@ describe('cancelSchema', () => {
     expect(cancelSchema.safeParse({ tradeId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479' }).success).toBe(true);
     expect(cancelSchema.safeParse({ tradeId: 'not-a-uuid' }).success).toBe(false);
     expect(cancelSchema.safeParse({ tradeId: null }).success).toBe(false);
+  });
+});
+
+describe('newSeasonSchema', () => {
+  it('정상 입력(기간 포함) 통과', () => {
+    expect(
+      newSeasonSchema.safeParse({ seedKrw: 10_000_000, seedUsd: 10_000, startDate: '2026-06-16', endDate: '2026-12-31' })
+        .success,
+    ).toBe(true);
+  });
+  it('기간 생략해도 통과', () => {
+    expect(newSeasonSchema.safeParse({ seedKrw: 5_000_000, seedUsd: 5_000 }).success).toBe(true);
+  });
+  it('시드 0·음수 거부', () => {
+    expect(newSeasonSchema.safeParse({ seedKrw: 0, seedUsd: 10_000 }).success).toBe(false);
+    expect(newSeasonSchema.safeParse({ seedKrw: 10_000_000, seedUsd: -1 }).success).toBe(false);
+  });
+  it('종료일 < 시작일 거부', () => {
+    expect(
+      newSeasonSchema.safeParse({ seedKrw: 10_000_000, seedUsd: 10_000, startDate: '2026-12-31', endDate: '2026-06-16' })
+        .success,
+    ).toBe(false);
+  });
+  it('잘못된 날짜 형식·미허용 필드 거부', () => {
+    expect(newSeasonSchema.safeParse({ seedKrw: 10_000_000, seedUsd: 10_000, startDate: '2026/06/16' }).success).toBe(
+      false,
+    );
+    expect(newSeasonSchema.safeParse({ seedKrw: 10_000_000, seedUsd: 10_000, hack: 1 }).success).toBe(false);
   });
 });
