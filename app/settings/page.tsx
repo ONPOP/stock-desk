@@ -5,6 +5,8 @@ import { getSettingsView } from '@/lib/supabase/queries/settings';
 import { getUsageSummary } from '@/lib/supabase/queries/usage';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { UsageCard } from '@/components/settings/usage-card';
+import { Card } from '@/components/ui/card';
+import { LogoutButton } from '@/components/auth/logout-button';
 
 export default async function SettingsPage() {
   const { supabase, user } = await requireUser();
@@ -18,6 +20,16 @@ export default async function SettingsPage() {
           API 키는 서버에서 AES-256으로 암호화되어 저장됩니다.
         </p>
       </div>
+      <Card className="flex-row items-center justify-between p-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">로그인 계정</p>
+          <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+        </div>
+        <LogoutButton
+          label="로그아웃"
+          className="shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+        />
+      </Card>
       <SettingsForm initial={view} />
       <UsageCard usage={usage} />
     </div>

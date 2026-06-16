@@ -8,6 +8,8 @@ interface JoinedRow {
   stock_id: string;
   group_name: string;
   auto_analysis: boolean;
+  is_favorite: boolean;
+  sort_order: number;
   stocks: {
     ticker: string;
     name_kr: string | null;
@@ -28,15 +30,19 @@ function flatten(row: JoinedRow): WatchlistItem | null {
     currency: row.stocks.currency,
     group_name: row.group_name,
     auto_analysis: row.auto_analysis,
+    isFavorite: row.is_favorite,
+    sortOrder: row.sort_order,
   };
 }
 
 export async function listWatchlist(db: SupabaseClient, userId: string): Promise<WatchlistItem[]> {
   const { data, error } = await db
     .from('watchlist_items')
-    .select('stock_id, group_name, auto_analysis, stocks!inner(ticker, name_kr, name_en, market, currency)')
+    .select(
+      'stock_id, group_name, auto_analysis, is_favorite, sort_order, stocks!inner(ticker, name_kr, name_en, market, currency)',
+    )
     .eq('user_id', userId)
-    .order('group_name', { ascending: true });
+    .order('sort_order', { ascending: true });
   if (error) throw new Error(`워치리스트 조회 실패: ${error.message}`);
   return (data as unknown as JoinedRow[]).map(flatten).filter((x): x is WatchlistItem => x !== null);
 }
@@ -80,6 +86,8 @@ export async function addToWatchlist(
     currency: stock.currency,
     group_name: group,
     auto_analysis: false,
+    isFavorite: false,
+    sortOrder: 0,
   };
 }
 
@@ -90,4 +98,38 @@ export async function removeFromWatchlist(db: SupabaseClient, userId: string, st
     .eq('user_id', userId)
     .eq('stock_id', stockId);
   if (error) throw new Error(`워치리스트 삭제 실패: ${error.message}`);
+}
+
+export async function setFavorite(
+  db: SupabaseClient,
+  userId: string,
+  stockId: string,
+  value: boolean,
+): Promise<void> {
+  const { error } = await db
+    .from('watchlist_items')
+    .update({ is_favorite: value })
+    .eq('user_id', userId)
+    .eq('stock_id', stockId);
+  if (error) throw new Error(`즐겨찾기 변경 실패: ${error.message}`);
+}
+
+/** 같은 묶음 내 드래그 정렬 — stock_id별 sort_order를 일괄 갱신(개별 update, RLS로 user_id 격리). */
+export async function reorderWatchlist(
+  db: SupabaseClient,
+  userId: string,
+  orders: { stockId: string; sortOrder: number }[],
+): Promise<void> {
+  if (orders.length === 0) return;
+  const results = await Promise.all(
+    orders.map(({ stockId, sortOrder }) =>
+      db
+        .from('watchlist_items')
+        .update({ sort_order: sortOrder })
+        .eq('user_id', userId)
+        .eq('stock_id', stockId),
+    ),
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(`정렬 변경 실패: ${failed.error.message}`);
 }

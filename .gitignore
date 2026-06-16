@@ -20,8 +20,10 @@
 # production
 /build
 
-# electron
+# electron / 배포 산출물 (대용량 + app.env 비밀 포함 → 절대 커밋 금지)
 /dist-electron
+*.dmg
+0.최종 파일/
 
 # misc
 .DS_Store
@@ -35,6 +37,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel

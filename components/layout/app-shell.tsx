@@ -6,23 +6,25 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, CalendarDays, TrendingUp, Scale,
+  LayoutDashboard, CalendarDays, TrendingUp, Scale, LineChart,
   NotebookPen, Briefcase, Settings, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LogoutButton } from '@/components/auth/logout-button';
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/', label: '대시보드', icon: LayoutDashboard },
   { href: '/calendar', label: '캘린더', icon: CalendarDays },
   { href: '/stocks', label: '내 종목', icon: TrendingUp },
+  { href: '/performance', label: '기간별 수익률', icon: LineChart },
   { href: '/compare', label: '비교', icon: Scale },
   { href: '/notes', label: '노트', icon: NotebookPen },
   { href: '/paper', label: '모의투자', icon: Briefcase },
   { href: '/settings', label: '설정', icon: Settings },
 ];
 
-// 모바일 하단 탭은 PRD 7장 고정 5개 (비교·노트 제외 — 사이드바·종목상세에서 접근)
-const HIDDEN_ON_MOBILE = new Set(['/notes', '/compare']);
+// 모바일 하단 탭은 PRD 7장 고정 5개 (비교·노트·수익률 제외 — 사이드바에서 접근)
+const HIDDEN_ON_MOBILE = new Set(['/notes', '/compare', '/performance']);
 const BOTTOM_TABS = NAV_ITEMS.filter((i) => !HIDDEN_ON_MOBILE.has(i.href));
 
 function isActive(pathname: string, href: string): boolean {
@@ -77,10 +79,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-fuchsia-500 text-xs font-semibold text-white">
               나
             </span>
-            <span className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[13px] font-semibold">내 워크스페이스</span>
               <span className="truncate text-[11px] text-muted-foreground">라이트 · KIS 연동</span>
             </span>
+            <LogoutButton className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" />
           </div>
         </div>
       </aside>

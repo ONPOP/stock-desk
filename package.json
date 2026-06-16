@@ -28,6 +28,9 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.71",
     "@base-ui/react": "^1.5.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "ai": "^6.0.204",
@@ -39,9 +42,10 @@
     "lucide-react": "^1.18.0",
     "next": "15.5.19",
     "next-themes": "^0.4.6",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-markdown": "^10.1.0",
+    "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "shadcn": "^4.11.0",
@@ -54,8 +58,8 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "dotenv": "^17.4.2",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3",
@@ -66,6 +70,9 @@
     "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   },
   "build": {
     "appId": "com.stockdesk.app",

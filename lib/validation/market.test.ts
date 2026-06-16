@@ -7,7 +7,10 @@ import {
   quoteQuerySchema,
   candleQuerySchema,
   watchlistAddSchema,
+  watchlistPatchSchema,
 } from './market';
+
+const UUID = '550e8400-e29b-41d4-a716-446655440000';
 
 describe('tickerSchema — 정상/비정상', () => {
   it('국내 6자리·해외 영문 티커를 허용한다', () => {
@@ -97,5 +100,45 @@ describe('watchlistAddSchema', () => {
     expect(
       watchlistAddSchema.safeParse({ ticker: 'AAPL', market: 'NASDAQ', group_name: 'x'.repeat(31) }).success,
     ).toBe(false);
+  });
+});
+
+describe('watchlistPatchSchema — favorite/reorder 판별 유니온', () => {
+  it('favorite 정상 입력 통과', () => {
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: true }).success).toBe(true);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: false }).success).toBe(true);
+  });
+
+  it('favorite 비정상 — 비uuid·value 누락·타입 오류 거부', () => {
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: 'not-uuid', value: true }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: 'yes' }).success).toBe(false);
+  });
+
+  it('reorder 정상 입력 통과', () => {
+    expect(
+      watchlistPatchSchema.safeParse({
+        action: 'reorder',
+        orders: [
+          { stock_id: UUID, sort_order: 0 },
+          { stock_id: '550e8400-e29b-41d4-a716-446655440002', sort_order: 1 },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('reorder 비정상 — 빈 배열·100개 초과·범위 밖 sort_order·비uuid 거부', () => {
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [] }).success).toBe(false);
+    const tooMany = Array.from({ length: 101 }, (_, i) => ({ stock_id: UUID, sort_order: i }));
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: tooMany }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: -1 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: 10000 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: 'x', sort_order: 0 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: 1.5 }] }).success).toBe(false);
+  });
+
+  it('알 수 없는 action 거부', () => {
+    expect(watchlistPatchSchema.safeParse({ action: 'delete', stock_id: UUID }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ stock_id: UUID, value: true }).success).toBe(false);
   });
 });

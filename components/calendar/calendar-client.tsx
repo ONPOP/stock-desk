@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight, RefreshCw, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { dateInTz, KST_TZ } from '@/lib/utils/date';
 import type { CalendarEvent, CalendarEventType } from '@/types';
 
 const TYPE_COLOR: Record<CalendarEventType, string> = {
@@ -27,9 +28,10 @@ function pad(n: number): string {
 }
 
 export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent[] }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth()); // 0-based
+  const todayStr = dateInTz(new Date().toISOString(), KST_TZ); // KST 기준 오늘 "YYYY-MM-DD"
+  const [ty0, tm0] = todayStr.split('-').map(Number); // tm0=1-based 월
+  const [year, setYear] = useState(ty0);
+  const [month, setMonth] = useState(tm0 - 1); // 0-based
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [addDate, setAddDate] = useState('');
   const [addTitle, setAddTitle] = useState('');
@@ -60,6 +62,12 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
     setYear(y);
     setMonth(m);
     loadMonth(y, m);
+  }
+
+  function goToToday() {
+    setYear(ty0);
+    setMonth(tm0 - 1);
+    loadMonth(ty0, tm0 - 1);
   }
 
   async function addEvent() {
@@ -149,6 +157,9 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
           <Button size="icon-sm" variant="outline" className="rounded-full" onClick={() => changeMonth(1)} aria-label="다음 달">
             <ChevronRight />
           </Button>
+          <Button size="sm" variant="outline" className="ml-1 rounded-full" onClick={goToToday}>
+            오늘
+          </Button>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {(['macro', 'earnings', 'custom'] as CalendarEventType[]).map((t) => (
@@ -186,11 +197,19 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
             {w}
           </div>
         ))}
-        {cells.map((cell, i) => (
-          <div key={i} className="min-h-24 bg-card p-1.5">
+        {cells.map((cell, i) => {
+          const isToday = !!cell && cell.dateStr === todayStr;
+          return (
+          <div key={i} className={`min-h-24 p-1.5 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/50' : 'bg-card'}`}>
             {cell && (
               <>
-                <div className="mb-1 text-[11.5px] font-medium tabular-nums text-muted-foreground">{cell.day}</div>
+                <div
+                  className={`mb-1 inline-flex size-5 items-center justify-center text-[11.5px] font-medium tabular-nums ${
+                    isToday ? 'rounded-full bg-primary font-bold text-primary-foreground' : 'text-muted-foreground'
+                  }`}
+                >
+                  {cell.day}
+                </div>
                 <div className="space-y-1">
                   {(eventsByDate.get(cell.dateStr) ?? []).slice(0, 3).map((e) => (
                     <div
@@ -218,7 +237,8 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
               </>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

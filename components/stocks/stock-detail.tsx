@@ -17,12 +17,13 @@ import { CompanyLogo } from '@/components/ui/company-logo';
 import { useQuote } from '@/lib/hooks/use-quote';
 import { formatMoney } from '@/lib/utils/money';
 import { ProfitCalculator } from './profit-calculator';
+import { HoldingsTradesPanel } from './holdings-trades-panel';
 import { MetricsPanel } from './metrics-panel';
 import { DividendCard } from './dividend-card';
 import { DisclosureFeed } from './disclosure-feed';
 import { NewsFeed } from '@/components/news/news-feed';
 import { NotesClient } from '@/components/notes/notes-client';
-import type { AiAnalysis, DisclosureItem, DividendInfo, NewsItem, Note, Stock, StockMetrics } from '@/types';
+import type { AiAnalysis, DisclosureItem, DividendInfo, NewsItem, Note, RealTrade, Stock, StockMetrics } from '@/types';
 import type { RefreshOutcome } from '@/lib/services/fundamentals';
 import type { PriceChartProps } from './price-chart';
 import type { AnalysisPanelProps } from '@/components/stocks/analysis-panel';
@@ -80,12 +81,14 @@ export function StockDetail({
   news,
   stockNotes,
   analyses,
+  trades,
 }: {
   stock: Stock;
   fundamentals: Fundamentals;
   news: NewsItem[];
   stockNotes: Note[];
   analyses: AiAnalysis[];
+  trades: RealTrade[];
 }) {
   const { quote, source, error, loading } = useQuote(stock.ticker, stock.market);
   const [fund, setFund] = useState<Fundamentals>(fundamentals);
@@ -222,6 +225,8 @@ export function StockDetail({
               </Card>
             </div>
           </div>
+
+          <HoldingsTradesPanel stock={stock} initialTrades={trades} currentPriceMinor={quote?.price ?? null} />
         </TabsContent>
 
         {/* 차트 */}

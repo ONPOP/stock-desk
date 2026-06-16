@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { MarketWidget } from '@/components/dashboard/market-widget';
 import { BriefingCard } from '@/components/dashboard/briefing-card';
-import { StatTiles } from '@/components/dashboard/stat-tiles';
+import { PortfolioOverview } from '@/components/dashboard/portfolio-overview';
 import { WatchlistTiles } from '@/components/dashboard/watchlist-tiles';
 import { AnalysesTile } from '@/components/dashboard/analyses-tile';
 import { ScheduleTile } from '@/components/dashboard/schedule-tile';
@@ -12,17 +12,20 @@ import { getLatestBriefing } from '@/lib/supabase/queries/briefings';
 import { listWatchlist } from '@/lib/supabase/queries/watchlist';
 import { listRecentAnalyses } from '@/lib/supabase/queries/analyses';
 import { listEvents } from '@/lib/supabase/queries/calendar';
+import { listAllTrades } from '@/lib/supabase/queries/real-trades';
+import { computeHoldings, computeRealized } from '@/lib/utils/portfolio';
 
 export default async function DashboardPage() {
   const { supabase, user } = await requireUser();
   // event_date(date)는 KST 기준 오늘 하루
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 
-  const [briefing, watchlist, analyses, events] = await Promise.all([
+  const [briefing, watchlist, analyses, events, trades] = await Promise.all([
     getLatestBriefing(supabase, user.id),
     listWatchlist(supabase, user.id),
     listRecentAnalyses(supabase, user.id, 5),
     listEvents(supabase, user.id, today, today),
+    listAllTrades(supabase, user.id),
   ]);
 
   return (
@@ -38,7 +41,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <StatTiles watchCount={watchlist.length} analyses={analyses} events={events} />
+      <PortfolioOverview holdings={computeHoldings(trades)} realized={computeRealized(trades)} />
 
       <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <WatchlistTiles items={watchlist} />
