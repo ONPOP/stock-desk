@@ -36,6 +36,13 @@ export function MetricsPanel({ metrics, currency }: { metrics: StockMetrics[]; c
     );
   }
   const latest = metrics[0];
+  // 재무(매출·손익·부채비율)는 KIS 시세지표 행(재무 null·오늘 날짜)이 최신이라 metrics[0]엔 비어 있다.
+  // 재무가 채워진 최신 행(DART)에서 읽어 표시한다. 밸류에이션(시총·PER·PBR·EPS)은 최신 행 그대로.
+  const fin =
+    metrics.find(
+      (m) => m.revenueQ !== null || m.operatingIncomeQ !== null || m.netIncomeQ !== null || m.debtRatio !== null,
+    ) ?? latest;
+  const sources = Array.from(new Set([latest.source, fin.source])).map((s) => s.toUpperCase()).join(' · ');
   // 실적 시계열: 매출이 있는 행을 기간 오름차순으로 최근 6개
   const series = metrics
     .filter((m) => m.revenueQ !== null && m.fiscalQuarter)
@@ -51,11 +58,11 @@ export function MetricsPanel({ metrics, currency }: { metrics: StockMetrics[]; c
         <Metric label="ROE" value={ratio(latest.roe, '%')} />
         <Metric label="EPS" value={eps(latest.eps, currency)} />
         <Metric label="배당수익률" value={ratio(latest.dividendYield, '%')} />
-        <Metric label="부채비율" value={ratio(latest.debtRatio, '%')} />
-        <Metric label="매출 (최근)" value={money(latest.revenueQ, currency)} />
-        <Metric label="영업이익 (최근)" value={money(latest.operatingIncomeQ, currency)} />
-        <Metric label="순이익 (최근)" value={money(latest.netIncomeQ, currency)} />
-        <Metric label="CAPEX" value={money(latest.capex, currency)} />
+        <Metric label="부채비율" value={ratio(fin.debtRatio, '%')} />
+        <Metric label="매출 (최근)" value={money(fin.revenueQ, currency)} />
+        <Metric label="영업이익 (최근)" value={money(fin.operatingIncomeQ, currency)} />
+        <Metric label="순이익 (최근)" value={money(fin.netIncomeQ, currency)} />
+        <Metric label="CAPEX" value={money(fin.capex, currency)} />
       </dl>
 
       {series.length > 1 && (
@@ -71,7 +78,7 @@ export function MetricsPanel({ metrics, currency }: { metrics: StockMetrics[]; c
         </div>
       )}
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Clock className="size-3" /> 출처: {latest.source.toUpperCase()} · 기준 {latest.asOfDate}
+        <Clock className="size-3" /> 출처: {sources} · 기준 {latest.asOfDate}
       </p>
     </div>
   );

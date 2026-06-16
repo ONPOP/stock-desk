@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LogoutButton } from '@/components/auth/logout-button';
+import { CalculatorFab } from '@/components/calculator/calculator-fab';
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/', label: '대시보드', icon: LayoutDashboard },
@@ -114,6 +115,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
+
+      <CalculatorFab />
     </div>
   );
 }
