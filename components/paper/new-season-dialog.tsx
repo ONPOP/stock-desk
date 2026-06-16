@@ -46,8 +46,9 @@ export function NewSeasonDialog({
     >
       <Card className="w-full max-w-md gap-4 p-5" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold">새 시즌 시작</h3>
-        <p className="rounded-lg bg-red-500/10 px-3 py-2.5 text-[13px] font-semibold text-red-600">
-          ⚠️ 새 시즌을 시작하면 현재 시즌의 보유·거래가 모두 종료(아카이브)되고 초기화됩니다. 되돌릴 수 없습니다.
+        <p className="rounded-lg bg-red-500/10 px-3 py-2.5 text-[13px] font-medium text-red-600">
+          ⚠️ 새 시즌이 빈 상태로 시작되고 현재 시즌은 종료됩니다. 지난 시즌 기록은 <strong className="font-bold">삭제되지 않고 보관</strong>되어
+          아래 ‘지난 시즌’에서 다시 볼 수 있지만, 이전 시즌으로 되돌아갈 수는 없습니다.
         </p>
 
         <div className="grid grid-cols-2 gap-3">

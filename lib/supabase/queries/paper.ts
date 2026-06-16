@@ -1,7 +1,8 @@
 // 모의투자 DB 쿼리 (F9) — 시즌/계좌/포지션/거래. 본인 행만(RLS 체인). 금액은 최소 단위 정수.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Currency, Market, PaperState, PaperTrade } from '@/types';
+import { computeRealized } from '@/lib/utils/portfolio';
+import type { ArchivedSeason, Currency, Market, PaperState, PaperTrade, RealTrade } from '@/types';
 
 interface SeasonRow {
   id: string;
@@ -362,4 +363,110 @@ export async function getPaperState(db: SupabaseClient, userId: string): Promise
       }),
     ),
   };
+}
+
+/** 종료(아카이브)된 시즌 목록 — 시즌별 거래내역 + 실현손익(computeRealized 재사용). 보존된 기록 열람용. */
+export async function listArchivedSeasons(db: SupabaseClient, userId: string): Promise<ArchivedSeason[]> {
+  const { data: seasonRows } = await db
+    .from('paper_seasons')
+    .select('id, season_no, seed_krw, seed_usd_cents, start_date, end_date, ended_at')
+    .eq('user_id', userId)
+    .not('ended_at', 'is', null)
+    .order('season_no', { ascending: false });
+  type SRow = {
+    id: string;
+    season_no: number;
+    seed_krw: number | string;
+    seed_usd_cents: number | string;
+    start_date: string | null;
+    end_date: string | null;
+    ended_at: string;
+  };
+  const seasons = (seasonRows ?? []) as SRow[];
+  if (seasons.length === 0) return [];
+
+  const seasonIds = seasons.map((s) => s.id);
+  const { data: accRows } = await db.from('paper_accounts').select('id, season_id').in('season_id', seasonIds);
+  const accs = (accRows ?? []) as Array<{ id: string; season_id: string }>;
+  const seasonByAcc = new Map(accs.map((a) => [a.id, a.season_id]));
+  const accIds = accs.map((a) => a.id);
+
+  const { data: tradeRows } = accIds.length
+    ? await db
+        .from('paper_trades')
+        .select(
+          'id, account_id, side, qty, price, order_type, status, memo, created_at, executed_at, stock_id, stocks(ticker, name_kr, name_en, market, currency)',
+        )
+        .in('account_id', accIds)
+        .order('created_at', { ascending: false })
+    : { data: [] };
+  type TRow = {
+    id: string;
+    account_id: string;
+    side: string;
+    qty: number | string;
+    price: number | string | null;
+    order_type: string;
+    status: string;
+    memo: string | null;
+    created_at: string;
+    executed_at: string | null;
+    stock_id: string;
+    stocks: { ticker: string; name_kr: string | null; name_en: string | null; market: string; currency: string } | null;
+  };
+  const rows = ((tradeRows ?? []) as unknown as TRow[]).filter((r) => r.stocks);
+
+  return seasons.map((s): ArchivedSeason => {
+    const own = rows.filter((r) => seasonByAcc.get(r.account_id) === s.id);
+    const nameOf = (r: TRow) => r.stocks!.name_kr ?? r.stocks!.name_en ?? r.stocks!.ticker;
+
+    const trades: PaperTrade[] = own.map((t) => ({
+      id: t.id,
+      ticker: t.stocks!.ticker,
+      name: nameOf(t),
+      side: t.side as 'buy' | 'sell',
+      qty: num(t.qty),
+      price: t.price == null ? null : num(t.price),
+      currency: t.stocks!.currency as Currency,
+      orderType: t.order_type as 'market' | 'reserved' | 'limit',
+      status: t.status as 'pending' | 'done' | 'canceled',
+      memo: t.memo,
+      createdAt: t.created_at,
+      executedAt: t.executed_at,
+    }));
+
+    // 체결분만 RealTrade로 매핑 → 평균법 실현손익(통화별)
+    const realTrades: RealTrade[] = own
+      .filter((t) => t.status === 'done' && t.price != null)
+      .map((t) => ({
+        id: t.id,
+        stockId: t.stock_id,
+        ticker: t.stocks!.ticker,
+        name: nameOf(t),
+        market: t.stocks!.market as Market,
+        currency: t.stocks!.currency as Currency,
+        side: t.side as 'buy' | 'sell',
+        qty: num(t.qty),
+        price: num(t.price),
+        tradeDate: (t.executed_at ?? t.created_at).slice(0, 10),
+        memo: t.memo,
+        createdAt: t.created_at,
+      }));
+    const realized = computeRealized(realTrades);
+    const realizedKrw = realized.filter((r) => r.currency === 'KRW').reduce((a, r) => a + r.realizedPnl, 0);
+    const realizedUsdCents = realized.filter((r) => r.currency === 'USD').reduce((a, r) => a + r.realizedPnl, 0);
+
+    return {
+      id: s.id,
+      seasonNo: s.season_no,
+      seedKrw: num(s.seed_krw),
+      seedUsdCents: num(s.seed_usd_cents),
+      startDate: s.start_date,
+      endDate: s.end_date,
+      endedAt: s.ended_at,
+      realizedKrw,
+      realizedUsdCents,
+      trades,
+    };
+  });
 }

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { CompanyLogo } from '@/components/ui/company-logo';
 import { StockPicker, type SelectedStock } from './stock-picker';
 import { NewSeasonDialog, type NewSeasonValues } from './new-season-dialog';
+import { ArchivedSeasons } from './archived-seasons';
 import { PortfolioSummaryBar, type AllocationSlice } from '@/components/stocks/portfolio-summary-bar';
 import { useQuote } from '@/lib/hooks/use-quote';
 import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
@@ -425,6 +426,8 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
           </ul>
         )}
       </Card>
+
+      <ArchivedSeasons />
 
       {/* 보유 종목 현재가 폴링(숨김) → 하단 수익 요약바 */}
       {state.positions.map((p) => (

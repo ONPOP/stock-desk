@@ -331,6 +331,20 @@ export interface PaperState {
   trades: PaperTrade[];
 }
 
+// 종료(아카이브)된 시즌 — 기록 보존. 삭제되지 않고 '지난 시즌'에서 열람.
+export interface ArchivedSeason {
+  id: string;
+  seasonNo: number;
+  seedKrw: number; // 시드(원)
+  seedUsdCents: number; // 시드(센트)
+  startDate: string | null;
+  endDate: string | null;
+  endedAt: string; // 종료 시각(ISO)
+  realizedKrw: number; // 시즌 실현손익(원)
+  realizedUsdCents: number; // 시즌 실현손익(센트)
+  trades: PaperTrade[]; // 거래 내역(최신순)
+}
+
 // ───────────────────────── AI 분석 (V1 F7) ─────────────────────────
 
 export type AnalysisPosition = 'buy' | 'neutral' | 'sell';
