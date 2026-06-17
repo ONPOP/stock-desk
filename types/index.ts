@@ -235,6 +235,7 @@ export interface RealTrade {
   price: number; // 체결 단가(최소 단위)
   tradeDate: string; // YYYY-MM-DD
   memo: string | null;
+  isEtf: boolean; // 국내 ETF 여부(매도 거래세 면제). 기본 false
   createdAt: string;
 }
 
@@ -285,6 +286,46 @@ export interface PortfolioSummary {
     evalPnl: number;
     evalRate: number; // %
     realizedPnl: number;
+  };
+}
+
+// ───────────────────────── 예수금·자산현황 (V2 · D11) ─────────────────────────
+
+export type CashTxType = 'deposit' | 'withdraw';
+
+/** 현금 입출금 기록(cash_ledger). amount는 양수, 방향은 type. */
+export interface CashTransaction {
+  id: string;
+  currency: Currency;
+  type: CashTxType;
+  amount: number; // 최소 단위 정수(양수)
+  txDate: string; // YYYY-MM-DD
+  memo: string | null;
+  createdAt: string;
+}
+
+/** 통화별 예수금 잔고(최소 단위 정수, 음수 가능) */
+export type CashBalance = Record<Currency, number>;
+
+/** 통화별 자산 1줄 */
+export interface AssetByCurrency {
+  currency: Currency;
+  cash: number; // 예수금
+  buyAmount: number; // 보유분 매입금액
+  currentValue: number; // 평가금액
+  evalPnl: number; // 평가손익
+}
+
+/** 자산 현황 요약 — 통화별 + 원화 환산 통합 */
+export interface AssetSummary {
+  byCurrency: AssetByCurrency[];
+  krwUnified: {
+    totalAsset: number; // 전체 자산 = 예수금 + 평가금액
+    cash: number; // 예수금
+    buyAmount: number; // 매입금액
+    currentValue: number; // 평가금액
+    evalPnl: number; // 평가손익
+    evalRate: number; // 수익률 %(보유 주식 기준)
   };
 }
 

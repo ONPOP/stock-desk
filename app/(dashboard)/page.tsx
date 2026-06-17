@@ -13,6 +13,7 @@ import { listWatchlist } from '@/lib/supabase/queries/watchlist';
 import { listRecentAnalyses } from '@/lib/supabase/queries/analyses';
 import { listEvents } from '@/lib/supabase/queries/calendar';
 import { listAllTrades } from '@/lib/supabase/queries/real-trades';
+import { listCashTx } from '@/lib/supabase/queries/cash';
 import { computeHoldings, computeRealized } from '@/lib/utils/portfolio';
 
 export default async function DashboardPage() {
@@ -20,12 +21,13 @@ export default async function DashboardPage() {
   // event_date(date)는 KST 기준 오늘 하루
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 
-  const [briefing, watchlist, analyses, events, trades] = await Promise.all([
+  const [briefing, watchlist, analyses, events, trades, cashTxs] = await Promise.all([
     getLatestBriefing(supabase, user.id),
     listWatchlist(supabase, user.id),
     listRecentAnalyses(supabase, user.id, 5),
     listEvents(supabase, user.id, today, today),
     listAllTrades(supabase, user.id),
+    listCashTx(supabase, user.id),
   ]);
 
   return (
@@ -41,7 +43,12 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <PortfolioOverview holdings={computeHoldings(trades)} realized={computeRealized(trades)} />
+      <PortfolioOverview
+        holdings={computeHoldings(trades)}
+        realized={computeRealized(trades)}
+        trades={trades}
+        initialCashTxs={cashTxs}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <WatchlistTiles items={watchlist} />
