@@ -49,7 +49,11 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
   const [price, setPrice] = useState('');
   const [qty, setQty] = useState('');
   const [date, setDate] = useState(todayLocal);
+  const [isEtf, setIsEtf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // 국내(KOSPI·KOSDAQ) 종목만 ETF 거래세 면제 구분이 의미 있음
+  const isKr = stock.market === 'KOSPI' || stock.market === 'KOSDAQ';
 
   const holding = useMemo(
     () => computeHoldings(trades).find((h) => h.stockId === stock.id) ?? null,
@@ -78,7 +82,7 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
       const res = await fetch('/api/trades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stockId: stock.id, side, qty: q, price: priceMinor, tradeDate: date }),
+        body: JSON.stringify({ stockId: stock.id, side, qty: q, price: priceMinor, tradeDate: date, isEtf: isKr ? isEtf : false }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -193,6 +197,20 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
             <Input id="t-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
+        {isKr && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isEtf}
+            onClick={() => setIsEtf((v) => !v)}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              isEtf ? 'border-accent bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <span className={`size-2 rounded-full ${isEtf ? 'bg-accent-foreground' : 'bg-muted-foreground/40'}`} />
+            ETF (매도 시 거래세 면제)
+          </button>
+        )}
         <Button onClick={add} disabled={submitting} size="sm" className="w-full sm:w-auto">
           <Plus data-icon="inline-start" />
           {submitting ? '저장 중…' : '기록 추가'}

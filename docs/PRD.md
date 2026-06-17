@@ -20,6 +20,7 @@
 | D8 | 뉴스 갱신 주기 | **장중 3시간 / 장외 6시간** |
 | D9 | 펀더멘털 데이터 소스 (W3) | **미국 재무·실적 = Finnhub** (당초 11장의 FMP에서 변경), **미국 배당 = FMP**, **미국 공시 = SEC EDGAR**, **한국 재무·배당·공시 = DART** (한국 PER/PBR/EPS/시총은 KIS 시세지표로 보강). 변경 사유: 사용자가 Finnhub 키를 발급, FMP 무료티어는 배당 데이터에 활용. **F12 공시 AI 1줄 요약은 W3에서 골격만**(`disclosures.summary_ai`는 nullable로 비움) → 실제 AI 요약 호출은 W4 뉴스 AI 파이프라인과 통합(유료 호출 회피) |
 | D10 | 뉴스·AI (W4) | **한국 뉴스 = 네이버 뉴스 검색 API**, **미국 뉴스 = Finnhub News**. **AI(뉴스 요약·감성분류, 공시 1줄 요약, 데일리 브리핑) = OpenAI gpt-4o-mini** (Vercel AI SDK). **AI 요약 호출은 MVP에서 수동 갱신 버튼 트리거**(비용 통제) — 자동 크론(D8 장중3h/장외6h, D4 브리핑 06:30)은 잡 함수·디스패처 골격만 구현하고 스케줄 등록은 배포 단계로 미룸 |
+| D11 | 예수금·자산현황 (V2) | **실거래(real_trades) 트랙에 예수금 도입.** 입출금은 `cash_ledger`(deposit/withdraw)로 기록하고, 예수금 잔고는 저장하지 않고 파생 계산: **예수금(통화별) = Σ입금 − Σ출금 − Σ(매수금액+수수료) + Σ(매도금액−수수료)** (과거 매매 자동 전체 반영, **음수 허용** — 기록 성격). **매매 수수료는 동적 계산**(저장 안 함): 국내 매수 0.018% / 매도 일반 0.218%(위탁 0.018%+증권거래세 0.20%) · **ETF 매도 0.018%(거래세 면제)**, 미국 매수 0.25% / 매도 0.25206%(위탁 0.25%+SEC 0.00206%). ETF 구분은 `real_trades.is_etf`(매매 입력 시 체크박스). 대시보드에 **전체자산(예수금+평가금액)·예수금·주식 매입금액(국내/해외)·평가금액·평가손익**을 원화 환산 통합 표시 |
 
 > 11장 API Design의 "재무(미국): FMP"는 D9에 따라 "재무(미국): Finnhub / 배당(미국): FMP"로 갱신됨.
 > 구현 주의(2026-06): FMP는 legacy v3(`api/v3`)가 신규 키에 403 → **stable API(`/stable/dividends`)** 사용. Finnhub `financials-reported`는 YTD 누적치 → **인접 분기 차분으로 분기 환산**.
@@ -252,6 +253,10 @@ paper_trades        : id, account_id, stock_id, side, qty, price, fee,
                       order_type(market|reserved), reserved_at?, executed_at?,
                       status(pending|done|canceled), memo, note_id?
 paper_positions     : (뷰) season_id, stock_id, qty, avg_price
+real_trades         : id, user_id, stock_id, side, qty, price, trade_date,
+                      memo, is_etf(국내 ETF 거래세 면제), created_at      ← V2 실거래
+cash_ledger         : id, user_id, currency(KRW|USD), type(deposit|withdraw),
+                      amount, tx_date, memo, created_at                 ← V2·D11 예수금(파생 잔고)
 notes               : id, user_id, stock_id?, content_md,
                       attached_analysis_id?, attached_trade_id?, created_at
 ```

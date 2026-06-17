@@ -450,6 +450,7 @@ export async function listArchivedSeasons(db: SupabaseClient, userId: string): P
         price: num(t.price),
         tradeDate: (t.executed_at ?? t.created_at).slice(0, 10),
         memo: t.memo,
+        isEtf: false, // 모의투자는 수수료·거래세 미반영
         createdAt: t.created_at,
       }));
     const realized = computeRealized(realTrades);
