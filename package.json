@@ -1,6 +1,6 @@
 {
   "name": "stock-desk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -19,6 +19,7 @@
     "sync:corp-codes": "tsx scripts/sync-corp-codes.ts",
     "verify:fundamentals": "tsx scripts/verify-fundamentals.ts",
     "verify:news": "tsx scripts/verify-news.ts",
+    "sim:ingest": "tsx scripts/sim-ingest.ts",
     "dev:e2e": "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-https://dummy-project.supabase.co} NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-dummy-anon-key} next dev --port 3457",
     "app:build": "next build && node scripts/electron-prepare.js",
     "app:start": "electron .",

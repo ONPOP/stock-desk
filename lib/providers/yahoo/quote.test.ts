@@ -130,7 +130,7 @@ describe('getQuote — 비정상', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status: 429, text: async () => '' }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(getQuote('AAPL', 'NASDAQ')).rejects.toBeInstanceOf(ExternalApiError);
-    expect(fetchMock).toHaveBeenCalledTimes(2); // query1 → query2 폴백
+    expect(fetchMock).toHaveBeenCalledTimes(6); // 3회 시도 × 2 미러 (transient 재시도 소진)
   });
 
   it('전일종가가 0이면 등락률은 0.00 (0 나눗셈 방지)', async () => {

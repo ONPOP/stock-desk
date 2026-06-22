@@ -4,7 +4,7 @@
 // [재설계] 그리드·칩·툴바 비주얼. [보존] loadMonth/addEvent/refresh/remove fetch·changeMonth·eventsByDate·셀 계산.
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, RefreshCw, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Plus, ListFilter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dateInTz, KST_TZ } from '@/lib/utils/date';
@@ -14,13 +14,24 @@ const TYPE_COLOR: Record<CalendarEventType, string> = {
   macro: 'bg-purple-500/12 text-purple-600 dark:text-purple-300',
   earnings: 'bg-up-soft text-up',
   custom: 'bg-accent text-accent-foreground',
+  options: 'bg-amber-500/15 text-amber-600 dark:text-amber-300',
+  dividend: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
 };
 const TYPE_DOT: Record<CalendarEventType, string> = {
   macro: 'bg-purple-500',
   earnings: 'bg-up',
   custom: 'bg-primary',
+  options: 'bg-amber-500',
+  dividend: 'bg-emerald-500',
 };
-const TYPE_LABEL: Record<CalendarEventType, string> = { macro: '거시', earnings: '실적', custom: '내 일정' };
+const TYPE_LABEL: Record<CalendarEventType, string> = {
+  macro: '거시',
+  earnings: '실적',
+  custom: '내 일정',
+  options: '옵션만기',
+  dividend: '배당',
+};
+const LEGEND_TYPES: CalendarEventType[] = ['macro', 'earnings', 'options', 'dividend', 'custom'];
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function pad(n: number): string {
@@ -36,6 +47,18 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
   const [addDate, setAddDate] = useState('');
   const [addTitle, setAddTitle] = useState('');
   const [busy, setBusy] = useState(false);
+  // 종목 표시 필터 — 숨길 종목 stockId 집합 (기본 비어있음 = 전체 표시)
+  const [hiddenStocks, setHiddenStocks] = useState<Set<string>>(new Set());
+  const [showFilter, setShowFilter] = useState(false);
+
+  function toggleStock(id: string) {
+    setHiddenStocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function loadMonth(y: number, m: number) {
     const from = `${y}-${pad(m + 1)}-01`;
@@ -107,7 +130,8 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
         return;
       }
       await loadMonth(year, month);
-      toast.success(`거시 ${data.result?.macro ?? 0}건 · 실적 ${data.result?.earnings ?? 0}건 갱신`);
+      const r = data.result ?? {};
+      toast.success(`거시 ${r.macro ?? 0} · 실적 ${r.earnings ?? 0} · 옵션 ${r.options ?? 0} · 배당 ${r.dividends ?? 0}건 갱신`);
     } catch {
       toast.error('네트워크 오류');
     } finally {
@@ -129,14 +153,25 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
     }
   }
 
+  // 종목 일정이 달린 종목 목록(필터 UI용) — 중복 제거 + 가나다 정렬
+  const stockList = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of events) if (e.stockId) m.set(e.stockId, e.name ?? e.ticker ?? e.stockId);
+    return [...m.entries()]
+      .map(([stockId, label]) => ({ stockId, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+  }, [events]);
+
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const e of events) {
+      // 숨긴 종목의 일정은 제외 (시장 공통 일정은 stockId 없음 → 항상 표시)
+      if (e.stockId && hiddenStocks.has(e.stockId)) continue;
       if (!map.has(e.eventDate)) map.set(e.eventDate, []);
       map.get(e.eventDate)!.push(e);
     }
     return map;
-  }, [events]);
+  }, [events, hiddenStocks]);
 
   const firstWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay();
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -161,8 +196,8 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
             오늘
           </Button>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {(['macro', 'earnings', 'custom'] as CalendarEventType[]).map((t) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+          {LEGEND_TYPES.map((t) => (
             <span key={t} className="flex items-center gap-1.5">
               <span className={`size-2 rounded-full ${TYPE_DOT[t]}`} /> {TYPE_LABEL[t]}
             </span>
@@ -183,8 +218,48 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
           <Button size="sm" variant="outline" onClick={refresh} disabled={busy}>
             <RefreshCw data-icon="inline-start" className={busy ? 'animate-spin' : ''} /> 일정 갱신
           </Button>
+          {stockList.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowFilter((v) => !v)}
+              aria-pressed={showFilter}
+            >
+              <ListFilter data-icon="inline-start" /> 종목 표시
+              {hiddenStocks.size > 0 && ` (${stockList.length - hiddenStocks.size}/${stockList.length})`}
+            </Button>
+          )}
         </div>
       </div>
+
+      {showFilter && stockList.length > 0 && (
+        <div className="space-y-2 rounded-xl border bg-secondary/30 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">캘린더에 표시할 종목 (기본 전체)</span>
+            <div className="flex gap-1.5">
+              <Button size="xs" variant="ghost" onClick={() => setHiddenStocks(new Set())}>
+                전체
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => setHiddenStocks(new Set(stockList.map((s) => s.stockId)))}>
+                해제
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {stockList.map((s) => (
+              <label key={s.stockId} className="flex cursor-pointer items-center gap-1.5 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={!hiddenStocks.has(s.stockId)}
+                  onChange={() => toggleStock(s.stockId)}
+                  className="size-3.5 accent-[var(--color-primary)]"
+                />
+                {s.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border bg-border text-sm">
         {WEEKDAYS.map((w, i) => (

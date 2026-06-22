@@ -3,6 +3,12 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CalendarEvent, CalendarEventType } from '@/types';
 
+interface JoinedStock {
+  ticker: string | null;
+  name_kr: string | null;
+  name_en: string | null;
+}
+
 interface EventRow {
   id: string;
   type: string;
@@ -12,9 +18,12 @@ interface EventRow {
   confirmed: boolean;
   source: string | null;
   memo: string | null;
+  stocks?: JoinedStock | JoinedStock[] | null;
 }
 
 function rowToEvent(r: EventRow): CalendarEvent {
+  // PostgREST 임베드는 단일 객체 또는 배열로 올 수 있어 정규화
+  const s = Array.isArray(r.stocks) ? r.stocks[0] : r.stocks;
   return {
     id: r.id,
     type: r.type as CalendarEventType,
@@ -24,10 +33,13 @@ function rowToEvent(r: EventRow): CalendarEvent {
     confirmed: r.confirmed,
     source: r.source,
     memo: r.memo,
+    ticker: s?.ticker ?? null,
+    name: s?.name_kr ?? s?.name_en ?? s?.ticker ?? null,
   };
 }
 
-const COLS = 'id, type, stock_id, title, event_date, confirmed, source, memo';
+// 종목 일정 표시·필터를 위해 stocks(ticker/name) 조인
+const COLS = 'id, type, stock_id, title, event_date, confirmed, source, memo, stocks(ticker, name_kr, name_en)';
 
 /** from~to 범위의 공통+본인 일정 */
 export async function listEvents(db: SupabaseClient, userId: string, from: string, to: string): Promise<CalendarEvent[]> {

@@ -18,6 +18,42 @@ export function NotesClient({ initialNotes, stockId }: { initialNotes: Note[]; s
   const [content, setContent] = useState('');
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function startEdit(n: Note) {
+    setEditingId(n.id);
+    setEditText(n.contentMd);
+  }
+
+  async function saveEdit(id: string) {
+    const text = editText.trim();
+    if (!text) {
+      toast.error('내용을 입력해주세요.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/notes?id=${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content_md: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? '수정에 실패했습니다.');
+        return;
+      }
+      setNotes((prev) => prev.map((x) => (x.id === id ? data.note : x)));
+      setEditingId(null);
+      toast.success('노트를 수정했습니다.');
+    } catch {
+      toast.error('네트워크 오류로 수정하지 못했습니다.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function add() {
     const text = content.trim();
@@ -122,17 +158,48 @@ export function NotesClient({ initialNotes, stockId }: { initialNotes: Note[]; s
                     {new Date(n.createdAt).toLocaleString('ko-KR')}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => remove(n.id)}
-                  className="text-[11px] text-muted-foreground transition-colors hover:text-up"
-                >
-                  삭제
-                </button>
+                {editingId !== n.id && (
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(n)}
+                      className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(n.id)}
+                      className="text-[11px] text-muted-foreground transition-colors hover:text-up"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="text-sm leading-relaxed text-foreground/90 [&_p]:mb-1 [&_ul]:list-disc [&_ul]:pl-5">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{n.contentMd}</ReactMarkdown>
-              </div>
+              {editingId === n.id ? (
+                <div className="space-y-2">
+                  <textarea
+                    className="block min-h-24 w-full resize-y rounded-xl border bg-transparent p-3 text-sm leading-relaxed outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    maxLength={5000}
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditingId(null)} disabled={savingEdit}>
+                      취소
+                    </Button>
+                    <Button size="sm" onClick={() => saveEdit(n.id)} disabled={savingEdit}>
+                      {savingEdit ? '저장 중…' : '저장'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm leading-relaxed text-foreground/90 [&_p]:mb-1 [&_ul]:list-disc [&_ul]:pl-5">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{n.contentMd}</ReactMarkdown>
+                </div>
+              )}
             </li>
           ))}
         </ul>

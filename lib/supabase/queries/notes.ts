@@ -60,6 +60,23 @@ export async function createNote(db: SupabaseClient, userId: string, input: Note
   return rowToNote(data as unknown as NoteRow);
 }
 
+export async function updateNote(
+  db: SupabaseClient,
+  userId: string,
+  noteId: string,
+  contentMd: string,
+): Promise<Note> {
+  const { data, error } = await db
+    .from('notes')
+    .update({ content_md: contentMd })
+    .eq('user_id', userId)
+    .eq('id', noteId)
+    .select(NOTE_COLS)
+    .single();
+  if (error) throw new Error(`노트 수정 실패: ${error.message}`);
+  return rowToNote(data as unknown as NoteRow);
+}
+
 export async function deleteNote(db: SupabaseClient, userId: string, noteId: string): Promise<void> {
   const { error } = await db.from('notes').delete().eq('user_id', userId).eq('id', noteId);
   if (error) throw new Error(`노트 삭제 실패: ${error.message}`);

@@ -100,6 +100,38 @@ describe('computeRealized', () => {
     expect(r).toHaveLength(1);
     expect(r[0].avgBuyPrice).toBe(0);
     expect(r[0].realizedRate).toBe(0);
+    expect(r[0].buyDate).toBe(''); // 매수 기록 없음
+  });
+
+  it('매수일(buyDate) — 매수→매도는 해당 매수일·실현일', () => {
+    const r = computeRealized([
+      tr({ side: 'buy', qty: 100, price: 1100, tradeDate: '2026-01-05' }),
+      tr({ side: 'sell', qty: 50, price: 1500, tradeDate: '2026-02-10' }),
+    ]);
+    expect(r[0].buyDate).toBe('2026-01-05');
+    expect(r[0].tradeDate).toBe('2026-02-10');
+  });
+
+  it('매수일 — 분할 매수 후 매도는 최초 진입일', () => {
+    const r = computeRealized([
+      tr({ side: 'buy', qty: 100, price: 1000, tradeDate: '2026-01-05' }),
+      tr({ side: 'buy', qty: 50, price: 1300, tradeDate: '2026-01-20' }),
+      tr({ side: 'sell', qty: 100, price: 1500, tradeDate: '2026-02-10' }),
+    ]);
+    expect(r[0].buyDate).toBe('2026-01-05');
+  });
+
+  it('매수일 — 전량 청산 후 재매수하면 새 진입일', () => {
+    const r = computeRealized([
+      tr({ side: 'buy', qty: 100, price: 1000, tradeDate: '2026-01-05' }),
+      tr({ side: 'sell', qty: 100, price: 1200, tradeDate: '2026-02-10' }),
+      tr({ side: 'buy', qty: 50, price: 1300, tradeDate: '2026-03-01' }),
+      tr({ side: 'sell', qty: 50, price: 1400, tradeDate: '2026-03-15' }),
+    ]);
+    expect(r).toHaveLength(2);
+    const byDate = Object.fromEntries(r.map((x) => [x.tradeDate, x.buyDate]));
+    expect(byDate['2026-02-10']).toBe('2026-01-05');
+    expect(byDate['2026-03-15']).toBe('2026-03-01');
   });
 });
 

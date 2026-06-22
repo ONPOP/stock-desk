@@ -265,7 +265,8 @@ export interface RealizedTrade {
   avgBuyPrice: number; // 매도 시점 평단가
   realizedPnl: number; // (sellPrice - avgBuyPrice) * qty
   realizedRate: number; // %
-  tradeDate: string;
+  buyDate: string; // 보유 구간 최초 매수일(YYYY-MM-DD). 매수 기록 없으면 ''
+  tradeDate: string; // 매도일(수익 실현일)
 }
 
 /** 통화별 합계 */
@@ -402,7 +403,7 @@ export interface AiAnalysis {
 
 // ───────────────────────── 캘린더 (V1 F2) ─────────────────────────
 
-export type CalendarEventType = 'macro' | 'earnings' | 'custom';
+export type CalendarEventType = 'macro' | 'earnings' | 'custom' | 'options' | 'dividend';
 
 export interface CalendarEvent {
   id: string;
@@ -415,6 +416,9 @@ export interface CalendarEvent {
   confirmed: boolean;
   source: string | null;
   memo: string | null;
+  /** 종목 일정일 때 표시·필터용 (조인) */
+  ticker?: string | null;
+  name?: string | null;
 }
 
 /** API 사용량 집계 1행 */

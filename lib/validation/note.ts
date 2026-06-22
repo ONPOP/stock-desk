@@ -14,6 +14,14 @@ export const noteCreateSchema = z
 
 export type NoteCreate = z.infer<typeof noteCreateSchema>;
 
+export const noteUpdateSchema = z
+  .object({
+    content_md: z.string().trim().min(1, '내용을 입력해주세요.').max(5000, '노트가 너무 깁니다.'),
+  })
+  .strict();
+
+export type NoteUpdate = z.infer<typeof noteUpdateSchema>;
+
 /** 목록 쿼리 — 검색어(q)·종목 필터(stock=ticker는 라우트에서 stock_id로 변환) */
 export const noteQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),

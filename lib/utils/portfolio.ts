@@ -73,8 +73,10 @@ export function computeRealized(trades: RealTrade[]): RealizedTrade[] {
     const sorted = [...list].sort(chronological);
     let qty = 0;
     let avg = new Decimal(0);
+    let entryDate = ''; // 현재 보유 구간의 최초 매수일(전량 청산 시 리셋)
     for (const t of sorted) {
       if (t.side === 'buy') {
+        if (qty === 0) entryDate = t.tradeDate; // 0에서 다시 진입하면 새 매수일
         const newQty = qty + t.qty;
         avg = avg.mul(qty).plus(new Decimal(t.price).mul(t.qty)).div(newQty);
         qty = newQty;
@@ -95,10 +97,14 @@ export function computeRealized(trades: RealTrade[]): RealizedTrade[] {
           avgBuyPrice: avgInt,
           realizedPnl: pnl,
           realizedRate: rate,
+          buyDate: entryDate,
           tradeDate: t.tradeDate,
         });
         qty = Math.max(0, qty - t.qty);
-        if (qty === 0) avg = new Decimal(0);
+        if (qty === 0) {
+          avg = new Decimal(0);
+          entryDate = '';
+        }
       }
     }
   }
