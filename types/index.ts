@@ -50,6 +50,14 @@ export interface StockSearchResult {
   currency: Currency;
 }
 
+/** 워치리스트 탭(컬렉션) — 내 종목을 탭 단위로 분리 관리. 기본 탭은 삭제·이름변경 불가 */
+export interface WatchlistTab {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  sortOrder: number;
+}
+
 /** 워치리스트 항목 — 종목 정보 + 그룹/자동분석 플래그 */
 export interface WatchlistItem {
   stock_id: string;

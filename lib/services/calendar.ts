@@ -6,7 +6,7 @@ import type { CalendarEventType } from '@/types';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 import { regionOf } from '@/lib/utils/market-hours';
 import { getFinnhubKey } from '@/lib/supabase/queries/settings';
-import { listWatchlist } from '@/lib/supabase/queries/watchlist';
+import { listAllWatchlistItems } from '@/lib/supabase/queries/watchlist';
 import { replaceEventsBySource } from '@/lib/supabase/queries/calendar';
 import { getDividendsByStock } from '@/lib/supabase/queries/fundamentals';
 import { FinnhubClient } from '@/lib/providers/finnhub/client';
@@ -40,7 +40,7 @@ function addDays(iso: string, days: number): string {
 export async function refreshCalendar(userDb: SupabaseClient, userId: string): Promise<CalendarRefreshResult> {
   const admin = createAdminSupabase();
   const today = new Date().toISOString().slice(0, 10);
-  const watchlist = await listWatchlist(userDb, userId);
+  const watchlist = await listAllWatchlistItems(userDb, userId);
   const usStocks = watchlist.filter((w) => regionOf(w.market) !== 'KR');
   const nameOf = (w: (typeof watchlist)[number]) => w.name_kr ?? w.name_en ?? w.ticker;
 
