@@ -3,4 +3,5 @@ export { DartClient, DartNoDataError, DART_BASE_URL } from '@/lib/providers/dart
 export { getDartMetrics, parseDartAmount } from '@/lib/providers/dart/metrics';
 export { getDartDividends } from '@/lib/providers/dart/dividend';
 export { getDartDisclosures, classifyDartReport, dartDateToIso } from '@/lib/providers/dart/disclosure';
+export { parseIrDocument, isIrOpenReport, fetchIrInfo, type IrInfo } from '@/lib/providers/dart/ir-schedule';
 export { fetchCorpCodeMap, parseCorpCodeXml, type CorpCodeEntry } from '@/lib/providers/dart/corp-code';

@@ -77,6 +77,30 @@ export async function createEvent(
   return rowToEvent(data as EventRow);
 }
 
+export async function updateEvent(
+  db: SupabaseClient,
+  userId: string,
+  id: string,
+  patch: { title?: string; eventDate?: string; type?: CalendarEventType; memo?: string | null },
+): Promise<CalendarEvent> {
+  const fields: Record<string, unknown> = {};
+  if (patch.title !== undefined) fields.title = patch.title;
+  if (patch.eventDate !== undefined) fields.event_date = patch.eventDate;
+  if (patch.type !== undefined) fields.type = patch.type;
+  if (patch.memo !== undefined) fields.memo = patch.memo;
+  // 본인이 만든 일정(source='user')만 수정 — 공통 시드/자동 일정은 불변
+  const { data, error } = await db
+    .from('calendar_events')
+    .update(fields)
+    .eq('user_id', userId)
+    .eq('id', id)
+    .eq('source', 'user')
+    .select(COLS)
+    .single();
+  if (error) throw new Error(`일정 수정 실패: ${error.message}`);
+  return rowToEvent(data as EventRow);
+}
+
 export async function deleteEvent(db: SupabaseClient, userId: string, id: string): Promise<void> {
   const { error } = await db.from('calendar_events').delete().eq('user_id', userId).eq('id', id);
   if (error) throw new Error(`일정 삭제 실패: ${error.message}`);
