@@ -8,13 +8,12 @@ import {
   Bar,
   LineChart,
   Line,
-  PieChart,
-  Pie,
   Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
 import { Card } from '@/components/ui/card';
@@ -25,7 +24,6 @@ import type { RealTrade } from '@/types';
 
 type Mode = 'year' | 'month' | 'range';
 
-const DONUT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#94a3b8'];
 const UP = '#e0364f';
 const DOWN = '#2f6fed';
 
@@ -90,7 +88,7 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
     return { buckets: list, filtered: f };
   }, [rows, mode, year, range]);
 
-  // 종목별 실현손익(도넛 — 비중은 이익 종목만)
+  // 종목별 실현손익(가로 막대 — 이익·손실 모두, 기여도 큰 순)
   const byStock = useMemo(() => {
     const map = new Map<string, { name: string; value: number }>();
     for (const r of filtered) {
@@ -98,7 +96,17 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
       cur.value += r.krw;
       map.set(r.stockId, cur);
     }
-    return [...map.values()].filter((s) => s.value > 0).sort((a, b) => b.value - a.value);
+    return [...map.values()].filter((s) => s.value !== 0).sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  }, [filtered]);
+
+  // 누적 실현손익(매도 거래 건별 시간순 — 단일 연도여도 거래마다 점으로 표시)
+  const cumSeries = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => (a.tradeDate < b.tradeDate ? -1 : a.tradeDate > b.tradeDate ? 1 : 0));
+    let cum = 0;
+    return sorted.map((r, i) => {
+      cum += r.krw;
+      return { idx: i, label: r.tradeDate.slice(5), name: r.name, pnl: r.krw, cum };
+    });
   }, [filtered]);
 
   const summary = useMemo(() => {
@@ -108,8 +116,6 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
     const winRate = count > 0 ? Math.round((wins / count) * 100) : 0;
     return { total, count, winRate };
   }, [filtered]);
-
-  const donut = byStock.length > 7 ? [...byStock.slice(0, 6), { name: '기타', value: byStock.slice(6).reduce((a, s) => a + s.value, 0) }] : byStock;
 
   return (
     <div className="space-y-5">
@@ -219,11 +225,15 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
               <h3 className="text-sm font-semibold">누적 실현손익</h3>
               <div className="h-60 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={buckets} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                  <LineChart data={cumSeries} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                     <YAxis tickFormatter={(v) => formatCompactMoney(Number(v), 'KRW')} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={64} />
-                    <Tooltip formatter={(v) => signedKrw(Number(v) || 0)} contentStyle={TOOLTIP_STYLE} />
+                    <Tooltip
+                      formatter={(v) => signedKrw(Number(v) || 0)}
+                      labelFormatter={(_, p) => (p?.[0]?.payload ? `${p[0].payload.label} · ${p[0].payload.name}` : '')}
+                      contentStyle={TOOLTIP_STYLE}
+                    />
                     <Line type="monotone" dataKey="cum" stroke="var(--primary)" strokeWidth={2.5} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -231,34 +241,78 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
             </Card>
           </div>
 
-          {/* 종목별 도넛 */}
+          {/* 종목별 실현손익 (가로 막대 — 이익·손실 모두) */}
           <Card className="gap-3 p-4">
-            <h3 className="text-sm font-semibold">종목별 실현이익 비중</h3>
-            {donut.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">해당 기간에 이익 실현 종목이 없습니다.</p>
+            <h3 className="text-sm font-semibold">종목별 실현손익</h3>
+            {byStock.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">해당 기간에 실현손익이 없습니다.</p>
             ) : (
-              <div className="flex flex-col items-center gap-4 sm:flex-row">
-                <div className="h-56 w-56 shrink-0">
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <div className="w-full min-w-0 sm:flex-1" style={{ height: Math.max(140, byStock.length * 44) }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={donut} dataKey="value" nameKey="name" innerRadius={56} outerRadius={88} paddingAngle={2} stroke="none">
-                        {donut.map((s, i) => (
-                          <Cell key={s.name} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                    <BarChart data={byStock} layout="vertical" margin={{ top: 4, right: 12, left: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                      <XAxis type="number" tickFormatter={(v) => formatCompactMoney(Number(v), 'KRW')} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                      <YAxis type="category" dataKey="name" width={88} tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+                      <Tooltip formatter={(v) => signedKrw(Number(v) || 0)} contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'var(--muted)' }} />
+                      <ReferenceLine x={0} stroke="var(--border)" />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {byStock.map((s) => (
+                          <Cell key={s.name} fill={s.value >= 0 ? UP : DOWN} />
                         ))}
-                      </Pie>
-                      <Tooltip formatter={(v) => formatMoney(Number(v) || 0, 'KRW')} contentStyle={TOOLTIP_STYLE} />
-                    </PieChart>
+                      </Bar>
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <ul className="flex-1 space-y-1.5">
-                  {donut.map((s, i) => (
+                <ul className="space-y-1.5 sm:w-48">
+                  {byStock.map((s) => (
                     <li key={s.name} className="flex items-center gap-2 text-sm">
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: s.value >= 0 ? UP : DOWN }} />
                       <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                      <span className="font-medium tabular-nums text-up">{formatMoney(s.value, 'KRW')}</span>
+                      <span className={`font-medium tabular-nums ${pnlColor(s.value)}`}>{signedKrw(s.value)}</span>
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+          </Card>
+
+          {/* 종목별 수익률 표 (매도 건별) */}
+          <Card className="gap-3 p-4">
+            <h3 className="text-sm font-semibold">종목별 수익률</h3>
+            {filtered.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">해당 기간에 매도 기록이 없습니다.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="border-b text-xs text-muted-foreground">
+                      <th className="py-2 pr-3 text-left font-medium">종목명</th>
+                      <th className="px-3 py-2 text-right font-medium">매수 단가</th>
+                      <th className="px-3 py-2 text-right font-medium">매수량</th>
+                      <th className="px-3 py-2 text-right font-medium">판매 단가</th>
+                      <th className="px-3 py-2 text-right font-medium">수익률</th>
+                      <th className="px-3 py-2 text-left font-medium">매수일</th>
+                      <th className="py-2 pl-3 text-left font-medium">실현일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((r) => (
+                      <tr key={r.id} className="border-b border-border/50 last:border-0">
+                        <td className="py-2.5 pr-3 font-medium">{r.name}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(r.avgBuyPrice, r.currency)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{r.qty.toLocaleString()}주</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(r.sellPrice, r.currency)}</td>
+                        <td className={`px-3 py-2.5 text-right font-medium tabular-nums ${pnlColor(r.realizedRate)}`}>
+                          {r.realizedRate > 0 ? '+' : ''}
+                          {r.realizedRate.toFixed(2)}%
+                        </td>
+                        <td className="px-3 py-2.5 tabular-nums text-muted-foreground">{r.buyDate || '-'}</td>
+                        <td className="py-2.5 pl-3 tabular-nums text-muted-foreground">{r.tradeDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </Card>

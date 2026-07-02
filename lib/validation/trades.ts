@@ -9,6 +9,7 @@ export const tradeInputSchema = z.object({
   tradeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '거래일 형식이 올바르지 않습니다.'),
   memo: z.string().max(500).nullish(),
   isEtf: z.boolean().optional(), // 국내 ETF 여부(매도 거래세 면제). 미지정 시 false
+  fee: z.number().int('매매비용은 최소 단위 정수여야 합니다.').min(0, '매매비용은 0 이상이어야 합니다.').max(1_000_000_000_000_000).optional(), // 세금+수수료. 미지정 시 0
 });
 
 export type TradeInput = z.infer<typeof tradeInputSchema>;

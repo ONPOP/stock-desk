@@ -8,9 +8,12 @@ import {
   candleQuerySchema,
   watchlistAddSchema,
   watchlistPatchSchema,
+  watchlistCreateSchema,
+  watchlistTabPatchSchema,
 } from './market';
 
 const UUID = '550e8400-e29b-41d4-a716-446655440000';
+const WL = '550e8400-e29b-41d4-a716-446655440001'; // watchlist_id
 
 describe('tickerSchema — 정상/비정상', () => {
   it('국내 6자리·해외 영문 티커를 허용한다', () => {
@@ -91,34 +94,38 @@ describe('candleQuerySchema — count 기본값', () => {
   });
 });
 
-describe('watchlistAddSchema', () => {
-  it('group_name은 선택, 30자 초과 거부', () => {
-    expect(watchlistAddSchema.safeParse({ ticker: 'AAPL', market: 'NASDAQ' }).success).toBe(true);
-    expect(
-      watchlistAddSchema.safeParse({ ticker: 'AAPL', market: 'NASDAQ', group_name: '미국기술주' }).success,
-    ).toBe(true);
-    expect(
-      watchlistAddSchema.safeParse({ ticker: 'AAPL', market: 'NASDAQ', group_name: 'x'.repeat(31) }).success,
-    ).toBe(false);
+describe('watchlistAddSchema — watchlist_id 필수', () => {
+  it('정상 입력 통과', () => {
+    expect(watchlistAddSchema.safeParse({ watchlist_id: WL, ticker: 'AAPL', market: 'NASDAQ' }).success).toBe(true);
+  });
+  it('watchlist_id 누락·비uuid 거부', () => {
+    expect(watchlistAddSchema.safeParse({ ticker: 'AAPL', market: 'NASDAQ' }).success).toBe(false);
+    expect(watchlistAddSchema.safeParse({ watchlist_id: 'x', ticker: 'AAPL', market: 'NASDAQ' }).success).toBe(false);
+  });
+  it('잘못된 티커·시장 거부', () => {
+    expect(watchlistAddSchema.safeParse({ watchlist_id: WL, ticker: 'A A', market: 'NASDAQ' }).success).toBe(false);
+    expect(watchlistAddSchema.safeParse({ watchlist_id: WL, ticker: 'AAPL', market: 'XX' }).success).toBe(false);
   });
 });
 
-describe('watchlistPatchSchema — favorite/reorder 판별 유니온', () => {
+describe('watchlistPatchSchema — favorite/reorder 판별 유니온(watchlist_id 필수)', () => {
   it('favorite 정상 입력 통과', () => {
-    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: true }).success).toBe(true);
-    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: false }).success).toBe(true);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', watchlist_id: WL, stock_id: UUID, value: true }).success).toBe(true);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', watchlist_id: WL, stock_id: UUID, value: false }).success).toBe(true);
   });
 
-  it('favorite 비정상 — 비uuid·value 누락·타입 오류 거부', () => {
-    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: 'not-uuid', value: true }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: 'yes' }).success).toBe(false);
+  it('favorite 비정상 — watchlist_id 누락·비uuid·value 누락·타입 오류 거부', () => {
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', stock_id: UUID, value: true }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', watchlist_id: WL, stock_id: 'not-uuid', value: true }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', watchlist_id: WL, stock_id: UUID }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'favorite', watchlist_id: WL, stock_id: UUID, value: 'yes' }).success).toBe(false);
   });
 
   it('reorder 정상 입력 통과', () => {
     expect(
       watchlistPatchSchema.safeParse({
         action: 'reorder',
+        watchlist_id: WL,
         orders: [
           { stock_id: UUID, sort_order: 0 },
           { stock_id: '550e8400-e29b-41d4-a716-446655440002', sort_order: 1 },
@@ -127,18 +134,48 @@ describe('watchlistPatchSchema — favorite/reorder 판별 유니온', () => {
     ).toBe(true);
   });
 
-  it('reorder 비정상 — 빈 배열·100개 초과·범위 밖 sort_order·비uuid 거부', () => {
-    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [] }).success).toBe(false);
+  it('reorder 비정상 — watchlist_id 누락·빈 배열·100개 초과·범위 밖 sort_order·비uuid 거부', () => {
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: 0 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', watchlist_id: WL, orders: [] }).success).toBe(false);
     const tooMany = Array.from({ length: 101 }, (_, i) => ({ stock_id: UUID, sort_order: i }));
-    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: tooMany }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: -1 }] }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: 10000 }] }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: 'x', sort_order: 0 }] }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ action: 'reorder', orders: [{ stock_id: UUID, sort_order: 1.5 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', watchlist_id: WL, orders: tooMany }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', watchlist_id: WL, orders: [{ stock_id: UUID, sort_order: -1 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', watchlist_id: WL, orders: [{ stock_id: UUID, sort_order: 10000 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', watchlist_id: WL, orders: [{ stock_id: 'x', sort_order: 0 }] }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'reorder', watchlist_id: WL, orders: [{ stock_id: UUID, sort_order: 1.5 }] }).success).toBe(false);
   });
 
   it('알 수 없는 action 거부', () => {
-    expect(watchlistPatchSchema.safeParse({ action: 'delete', stock_id: UUID }).success).toBe(false);
-    expect(watchlistPatchSchema.safeParse({ stock_id: UUID, value: true }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ action: 'delete', watchlist_id: WL, stock_id: UUID }).success).toBe(false);
+    expect(watchlistPatchSchema.safeParse({ watchlist_id: WL, stock_id: UUID, value: true }).success).toBe(false);
+  });
+});
+
+describe('watchlistCreateSchema — 탭 생성', () => {
+  it('정상 이름 통과(공백 트림)', () => {
+    expect(watchlistCreateSchema.safeParse({ name: '반도체' }).success).toBe(true);
+    const r = watchlistCreateSchema.safeParse({ name: '  배당주  ' });
+    expect(r.success && r.data.name).toBe('배당주');
+  });
+  it('빈 이름·공백만·30자 초과 거부', () => {
+    expect(watchlistCreateSchema.safeParse({ name: '' }).success).toBe(false);
+    expect(watchlistCreateSchema.safeParse({ name: '   ' }).success).toBe(false);
+    expect(watchlistCreateSchema.safeParse({ name: 'x'.repeat(31) }).success).toBe(false);
+  });
+});
+
+describe('watchlistTabPatchSchema — rename/reorder 판별 유니온', () => {
+  it('rename 정상 통과', () => {
+    expect(watchlistTabPatchSchema.safeParse({ action: 'rename', id: WL, name: '단타' }).success).toBe(true);
+  });
+  it('rename 비정상 — id 비uuid·빈 이름 거부', () => {
+    expect(watchlistTabPatchSchema.safeParse({ action: 'rename', id: 'x', name: '단타' }).success).toBe(false);
+    expect(watchlistTabPatchSchema.safeParse({ action: 'rename', id: WL, name: '' }).success).toBe(false);
+  });
+  it('reorder 정상/빈 배열 거부', () => {
+    expect(
+      watchlistTabPatchSchema.safeParse({ action: 'reorder', orders: [{ id: WL, sort_order: 1 }] }).success,
+    ).toBe(true);
+    expect(watchlistTabPatchSchema.safeParse({ action: 'reorder', orders: [] }).success).toBe(false);
   });
 });

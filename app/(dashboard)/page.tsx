@@ -9,7 +9,7 @@ import { AnalysesTile } from '@/components/dashboard/analyses-tile';
 import { ScheduleTile } from '@/components/dashboard/schedule-tile';
 import { requireUser } from '@/lib/supabase/server';
 import { getLatestBriefing } from '@/lib/supabase/queries/briefings';
-import { listWatchlist } from '@/lib/supabase/queries/watchlist';
+import { listAllWatchlistItems } from '@/lib/supabase/queries/watchlist';
 import { listRecentAnalyses } from '@/lib/supabase/queries/analyses';
 import { listEvents } from '@/lib/supabase/queries/calendar';
 import { listAllTrades } from '@/lib/supabase/queries/real-trades';
@@ -23,7 +23,7 @@ export default async function DashboardPage() {
 
   const [briefing, watchlist, analyses, events, trades, cashTxs] = await Promise.all([
     getLatestBriefing(supabase, user.id),
-    listWatchlist(supabase, user.id),
+    listAllWatchlistItems(supabase, user.id),
     listRecentAnalyses(supabase, user.id, 5),
     listEvents(supabase, user.id, today, today),
     listAllTrades(supabase, user.id),

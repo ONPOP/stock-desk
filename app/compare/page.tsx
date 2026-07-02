@@ -1,13 +1,13 @@
 // F16 종목 비교 (V2) — 등록 종목 2~4개의 핵심 지표를 표로 비교.
 import { requireUser } from '@/lib/supabase/server';
-import { listWatchlist } from '@/lib/supabase/queries/watchlist';
+import { listAllWatchlistItems } from '@/lib/supabase/queries/watchlist';
 import { getMetricsSeries } from '@/lib/supabase/queries/fundamentals';
 import { CompareClient } from '@/components/compare/compare-client';
 import type { CompareItem } from '@/types';
 
 export default async function ComparePage() {
   const { supabase, user } = await requireUser();
-  const watchlist = await listWatchlist(supabase, user.id);
+  const watchlist = await listAllWatchlistItems(supabase, user.id);
   const items: CompareItem[] = await Promise.all(
     watchlist.map(async (w) => {
       const series = await getMetricsSeries(supabase, w.stock_id, 1).catch(() => []);

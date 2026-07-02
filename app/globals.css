@@ -172,3 +172,14 @@
   /* 숫자 공통: 등폭 + tabular (시세·금액 정렬) */
   .tabular-nums { font-variant-numeric: tabular-nums; }
 }
+
+/* 마스코트 펫 애니메이션 — 수익률 기분별(idle 상하·happy 점프·sad 흔들) */
+@keyframes pet-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes pet-jump { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-14px); } }
+@keyframes pet-shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+.pet-idle { animation: pet-bob 3s ease-in-out infinite; transform-origin: center bottom; }
+.pet-happy { animation: pet-jump 0.7s ease-in-out infinite; transform-origin: center bottom; }
+.pet-sad { animation: pet-shake 2.2s ease-in-out infinite; transform-origin: center bottom; }
+@media (prefers-reduced-motion: reduce) {
+  .pet-idle, .pet-happy, .pet-sad { animation: none; }
+}
