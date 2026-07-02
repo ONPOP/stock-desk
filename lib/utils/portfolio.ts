@@ -43,7 +43,8 @@ export function computeHoldings(trades: RealTrade[]): RealHolding[] {
         qty = newQty;
       } else {
         const sellQty = Math.min(t.qty, qty); // 보유 초과 매도분은 실현손익에서 제외
-        realized = realized.plus(new Decimal(t.price).minus(avg).mul(sellQty));
+        // 실현손익 = (매도가 − 평단) × 수량 − 매매비용(세금+수수료)
+        realized = realized.plus(new Decimal(t.price).minus(avg).mul(sellQty)).minus(t.fee ?? 0);
         qty = Math.max(0, qty - t.qty);
         if (qty === 0) avg = new Decimal(0);
       }
@@ -83,8 +84,11 @@ export function computeRealized(trades: RealTrade[]): RealizedTrade[] {
       } else {
         const avgInt = round(avg);
         const sellQty = qty > 0 ? Math.min(t.qty, qty) : t.qty;
-        const pnl = round(new Decimal(t.price).minus(avg).mul(sellQty));
-        const rate = avgInt > 0 ? new Decimal(t.price).minus(avgInt).div(avgInt).mul(100).toDecimalPlaces(2).toNumber() : 0;
+        const fee = t.fee ?? 0;
+        // 실현손익 = (매도가 − 평단) × 수량 − 매매비용, 수익률은 비용 차감 후 순수익률
+        const pnl = round(new Decimal(t.price).minus(avg).mul(sellQty).minus(fee));
+        const cost = avgInt * sellQty;
+        const rate = cost > 0 ? new Decimal(pnl).div(cost).mul(100).toDecimalPlaces(2).toNumber() : 0;
         out.push({
           id: t.id,
           stockId,
@@ -95,6 +99,7 @@ export function computeRealized(trades: RealTrade[]): RealizedTrade[] {
           qty: t.qty,
           sellPrice: t.price,
           avgBuyPrice: avgInt,
+          fee,
           realizedPnl: pnl,
           realizedRate: rate,
           buyDate: entryDate,

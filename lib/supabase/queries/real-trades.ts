@@ -12,6 +12,7 @@ interface TradeRow {
   trade_date: string;
   memo: string | null;
   is_etf: boolean | null;
+  fee: number | string | null;
   created_at: string;
   stock_id: string;
   stocks: { ticker: string; name_kr: string | null; name_en: string | null; market: Market; currency: Currency } | null;
@@ -32,12 +33,13 @@ function rowToTrade(r: TradeRow): RealTrade | null {
     tradeDate: r.trade_date,
     memo: r.memo,
     isEtf: r.is_etf ?? false,
+    fee: Number(r.fee ?? 0),
     createdAt: r.created_at,
   };
 }
 
 const COLS =
-  'id, side, qty, price, trade_date, memo, is_etf, created_at, stock_id, stocks!inner(ticker, name_kr, name_en, market, currency)';
+  'id, side, qty, price, trade_date, memo, is_etf, fee, created_at, stock_id, stocks!inner(ticker, name_kr, name_en, market, currency)';
 
 /** 사용자 전체 매매 기록(포트폴리오·기간별 수익률용) */
 export async function listAllTrades(db: SupabaseClient, userId: string): Promise<RealTrade[]> {
@@ -72,6 +74,7 @@ export interface InsertTradeInput {
   tradeDate: string;
   memo?: string | null;
   isEtf?: boolean;
+  fee?: number;
 }
 
 export async function insertTrade(db: SupabaseClient, userId: string, input: InsertTradeInput): Promise<RealTrade> {
@@ -88,6 +91,7 @@ export async function insertTrade(db: SupabaseClient, userId: string, input: Ins
       trade_date: input.tradeDate,
       memo: input.memo ?? null,
       is_etf: input.isEtf ?? false,
+      fee: input.fee ?? 0,
     })
     .select(COLS)
     .single();

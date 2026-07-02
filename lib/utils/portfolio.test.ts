@@ -18,6 +18,7 @@ function tr(p: Partial<RealTrade> & Pick<RealTrade, 'side' | 'qty' | 'price'>): 
     tradeDate: p.tradeDate ?? '2026-01-01',
     memo: null,
     isEtf: p.isEtf ?? false,
+    fee: p.fee ?? 0,
     createdAt: p.createdAt ?? `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
   };
 }
@@ -93,6 +94,27 @@ describe('computeRealized', () => {
     ]);
     expect(r[0].realizedPnl).toBe(-2000);
     expect(r[0].realizedRate).toBeCloseTo(-10, 1);
+  });
+
+  it('매매비용(세금+수수료) 차감 — 실현손익·순수익률', () => {
+    const r = computeRealized([
+      tr({ side: 'buy', qty: 50, price: 1100 }),
+      tr({ side: 'sell', qty: 50, price: 1500, fee: 3000 }),
+    ]);
+    // (1500-1100)*50 = 20000, 비용 3000 차감 → 17000
+    expect(r[0].realizedPnl).toBe(17000);
+    expect(r[0].fee).toBe(3000);
+    // 순수익률 = 17000 / (1100*50) = 30.9%
+    expect(r[0].realizedRate).toBeCloseTo(30.91, 1);
+  });
+
+  it('매매비용이 이익보다 크면 실현손익 음수', () => {
+    const r = computeRealized([
+      tr({ side: 'buy', qty: 10, price: 1000 }),
+      tr({ side: 'sell', qty: 10, price: 1050, fee: 800 }),
+    ]);
+    // (1050-1000)*10 = 500, 비용 800 → -300
+    expect(r[0].realizedPnl).toBe(-300);
   });
 
   it('매수 없는 매도(데이터 오류)도 죽지 않음', () => {

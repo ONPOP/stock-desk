@@ -244,6 +244,7 @@ export interface RealTrade {
   tradeDate: string; // YYYY-MM-DD
   memo: string | null;
   isEtf: boolean; // 국내 ETF 여부(매도 거래세 면제). 기본 false
+  fee: number; // 매매비용(세금+수수료, 최소 단위 정수). 매도 시 실현손익에서 차감. 기본 0
   createdAt: string;
 }
 
@@ -271,8 +272,9 @@ export interface RealizedTrade {
   qty: number;
   sellPrice: number;
   avgBuyPrice: number; // 매도 시점 평단가
-  realizedPnl: number; // (sellPrice - avgBuyPrice) * qty
-  realizedRate: number; // %
+  fee: number; // 매매비용(세금+수수료, 최소 단위). 실현손익에서 차감됨
+  realizedPnl: number; // (sellPrice - avgBuyPrice) * qty - fee
+  realizedRate: number; // % (매매비용 차감 후 순수익률)
   buyDate: string; // 보유 구간 최초 매수일(YYYY-MM-DD). 매수 기록 없으면 ''
   tradeDate: string; // 매도일(수익 실현일)
 }
