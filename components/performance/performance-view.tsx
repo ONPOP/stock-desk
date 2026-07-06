@@ -70,7 +70,9 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
 
   // 모드별 필터 + 버킷 키 산출
   const { buckets, filtered } = useMemo(() => {
-    const bucketKey = (date: string) => (mode === 'year' ? date.slice(0, 4) : date.slice(0, 7));
+    // range(임의 기간)는 일별, month는 월별, year는 연도별로 집계
+    const bucketKey = (date: string) =>
+      mode === 'year' ? date.slice(0, 4) : mode === 'month' ? date.slice(0, 7) : date.slice(0, 10);
     const inScope = (date: string) => {
       if (mode === 'year') return true;
       if (mode === 'month') return date.slice(0, 4) === year;
@@ -83,7 +85,8 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
     let cum = 0;
     const list = sorted.map(([key, pnl]) => {
       cum += pnl;
-      return { key, label: mode === 'year' ? key : key.slice(5) + '월', pnl, cum };
+      const label = mode === 'year' ? key : mode === 'month' ? key.slice(5) + '월' : key.slice(5);
+      return { key, label, pnl, cum };
     });
     return { buckets: list, filtered: f };
   }, [rows, mode, year, range]);
@@ -203,7 +206,7 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
           {/* 기간별 바 + 누적 라인 */}
           <div className="grid gap-5 lg:grid-cols-2">
             <Card className="gap-3 p-4">
-              <h3 className="text-sm font-semibold">{mode === 'year' ? '연도별' : '월별'} 실현손익</h3>
+              <h3 className="text-sm font-semibold">{mode === 'year' ? '연도별' : '월별/일별'} 실현손익</h3>
               <div className="h-60 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={buckets} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
