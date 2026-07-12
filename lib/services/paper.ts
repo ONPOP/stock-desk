@@ -12,8 +12,8 @@ import { shouldFillLimitOrder } from '@/lib/utils/paper-order';
 import {
   ensureSeason,
   getAccount,
-  getAccountById,
-  setCash,
+  debitCash,
+  creditCash,
   getPositionQty,
   insertTrade,
   fillTrade,
@@ -58,26 +58,7 @@ export async function placeOrder(
 
       if (shouldFillLimitOrder(params.side, quote.price, limitMinor)) {
         const price = quote.price; // 체결가 = 체결 시점 현재가
-        if (params.side === 'buy') {
-          const cost = params.qty * price;
-          if (account.cashBalance < cost) throw new ValidationError('잔고가 부족합니다.');
-          await setCash(db, account.id, account.cashBalance - cost);
-        } else {
-          const posQty = await getPositionQty(db, account.id, stock.id);
-          if (posQty < params.qty) throw new ValidationError('보유 수량이 부족합니다.');
-          await setCash(db, account.id, account.cashBalance + params.qty * price);
-        }
-        await insertTrade(db, {
-          accountId: account.id,
-          stockId: stock.id,
-          side: params.side,
-          qty: params.qty,
-          price,
-          orderType: 'limit',
-          status: 'done',
-          memo: params.memo,
-          executedAt: now.toISOString(),
-        });
+        await settleFill(db, account.id, stock.id, params.side, params.qty, price, 'limit', params.memo, now);
         return { status: 'executed', price };
       }
 
@@ -119,29 +100,47 @@ export async function placeOrder(
     const quote = await getCachedQuote(source, stock.ticker, stock.market);
     const price = quote.price;
 
-    if (params.side === 'buy') {
-      const cost = params.qty * price;
-      if (account.cashBalance < cost) throw new ValidationError('잔고가 부족합니다.');
-      await setCash(db, account.id, account.cashBalance - cost);
-    } else {
-      const posQty = await getPositionQty(db, account.id, stock.id);
-      if (posQty < params.qty) throw new ValidationError('보유 수량이 부족합니다.');
-      await setCash(db, account.id, account.cashBalance + params.qty * price);
-    }
-    await insertTrade(db, {
-      accountId: account.id,
-      stockId: stock.id,
-      side: params.side,
-      qty: params.qty,
-      price,
-      orderType: 'market',
-      status: 'done',
-      memo: params.memo,
-      executedAt: now.toISOString(),
-    });
+    await settleFill(db, account.id, stock.id, params.side, params.qty, price, 'market', params.memo, now);
     return { status: 'executed', price };
   } catch (e) {
     return { status: 'error', reason: errMsg(e) };
+  }
+}
+
+/**
+ * 체결 확정 — 잔고 원자 증감 후 거래 기록. 매수는 원자 조건부 차감(잔고 부족이면 거부),
+ * 매도는 보유 확인 후 원자 입금. 동시 주문의 잔고 이중지출(TOCTOU)을 DB 레벨에서 차단한다.
+ * 차감 성공 후 기록 실패 시 환불해 잔고-거래 정합을 유지한다.
+ */
+async function settleFill(
+  db: SupabaseClient,
+  accountId: string,
+  stockId: string,
+  side: 'buy' | 'sell',
+  qty: number,
+  price: number,
+  orderType: 'market' | 'limit',
+  memo: string | null | undefined,
+  now: Date,
+): Promise<void> {
+  if (side === 'buy') {
+    const remaining = await debitCash(db, accountId, qty * price);
+    if (remaining === null) throw new ValidationError('잔고가 부족합니다.');
+    try {
+      await insertTrade(db, {
+        accountId, stockId, side, qty, price, orderType, status: 'done', memo, executedAt: now.toISOString(),
+      });
+    } catch (e) {
+      await creditCash(db, accountId, qty * price); // 기록 실패 → 차감 환불
+      throw e;
+    }
+  } else {
+    const posQty = await getPositionQty(db, accountId, stockId);
+    if (posQty < qty) throw new ValidationError('보유 수량이 부족합니다.');
+    await insertTrade(db, {
+      accountId, stockId, side, qty, price, orderType, status: 'done', memo, executedAt: now.toISOString(),
+    });
+    await creditCash(db, accountId, qty * price);
   }
 }
 
@@ -166,21 +165,22 @@ export async function checkLimitOrders(
     try {
       const quote = await getCachedQuote(source, o.ticker, o.market);
       if (!shouldFillLimitOrder(o.side, quote.price, o.limitPrice)) continue;
-
-      const account = await getAccountById(db, o.accountId);
-      if (!account) continue;
       const price = quote.price;
 
       if (o.side === 'buy') {
-        const cost = o.qty * price;
-        if (account.cashBalance < cost) continue; // 잔고 부족 → 다음 기회로 보류
-        if (!(await fillTrade(db, o.tradeId, now.toISOString(), price))) continue; // 이미 처리됨
-        await setCash(db, account.id, account.cashBalance - cost);
+        // 원자 차감을 먼저 시도(성공해야 체결). 잔고 부족이면 null → 보류.
+        const remaining = await debitCash(db, o.accountId, o.qty * price);
+        if (remaining === null) continue;
+        // fillTrade가 이미 처리됨(false)이면 방금 차감분 환불(이중 체결·차감 방지)
+        if (!(await fillTrade(db, o.tradeId, now.toISOString(), price))) {
+          await creditCash(db, o.accountId, o.qty * price);
+          continue;
+        }
       } else {
-        const posQty = await getPositionQty(db, account.id, o.stockId);
+        const posQty = await getPositionQty(db, o.accountId, o.stockId);
         if (posQty < o.qty) continue;
         if (!(await fillTrade(db, o.tradeId, now.toISOString(), price))) continue;
-        await setCash(db, account.id, account.cashBalance + o.qty * price);
+        await creditCash(db, o.accountId, o.qty * price);
       }
       filled++;
     } catch {

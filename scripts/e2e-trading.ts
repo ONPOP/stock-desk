@@ -124,7 +124,7 @@ async function main() {
     );
   }
 
-  // ── 그룹 3: tick 가드 (kill switch·비활성·개장·스로틀)
+  // ── 그룹 3: tick 가드 (kill switch·비활성·개장·직렬화 락)
   console.log('\n[3] tick 가드');
   {
     await api('/api/trading', { method: 'PATCH', body: JSON.stringify({ enabled: false, killSwitch: false }) });
@@ -132,11 +132,13 @@ async function main() {
     const d1 = await r1.json();
     check('비활성 → 미실행', r1.status === 200 && d1.ran === false, `skipped="${d1.skipped}"`);
 
-    const r1b = await api('/api/trading/tick', { method: 'POST' });
-    const d1b = await r1b.json();
-    check('연속 호출 스로틀(5초)', d1b.skipped?.includes('간격') === true, `skipped="${d1b.skipped}"`);
+    // 동시 tick 다발 → 락으로 직렬화(최소 1건 차단). 상세 직렬화 검증은 e2e-security.ts [7].
+    const burst = await Promise.all(
+      Array.from({ length: 6 }, () => api('/api/trading/tick', { method: 'POST' }).then((r) => r.json())),
+    );
+    const blocked = burst.filter((d) => d.skipped === '다른 tick 진행 중').length;
+    check('동시 tick 락 직렬화', blocked >= 1 || burst.every((d) => d.ran === false), `blocked=${blocked}/6`);
 
-    await new Promise((s) => setTimeout(s, 5100));
     await api('/api/trading', {
       method: 'PATCH',
       body: JSON.stringify({ enabled: true, universe: [{ ticker: '005930', market: 'KOSPI' }] }),

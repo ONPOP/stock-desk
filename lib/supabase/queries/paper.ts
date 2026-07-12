@@ -155,6 +155,30 @@ export async function setCash(db: SupabaseClient, accountId: string, newCash: nu
   if (error) throw new Error(`잔고 갱신 실패: ${error.message}`);
 }
 
+/**
+ * 잔고 원자 조건부 차감 — 동시 주문 이중지출 방지(TOCTOU). 잔고 부족이면 null(=거부).
+ * 반환 = 차감 후 잔고. read-check-write 대신 단일 원자 갱신으로 대체한다.
+ */
+export async function debitCash(db: SupabaseClient, accountId: string, amount: number): Promise<number | null> {
+  const { data, error } = await db.rpc('paper_adjust_cash', {
+    p_account_id: accountId,
+    p_delta: -Math.abs(amount),
+    p_require_nonneg: true,
+  });
+  if (error) throw new Error(`잔고 차감 실패: ${error.message}`);
+  return data == null ? null : Number(data);
+}
+
+/** 잔고 원자 증액 — 매도 대금 입금. 조건 없음(항상 성공). */
+export async function creditCash(db: SupabaseClient, accountId: string, amount: number): Promise<void> {
+  const { error } = await db.rpc('paper_adjust_cash', {
+    p_account_id: accountId,
+    p_delta: Math.abs(amount),
+    p_require_nonneg: false,
+  });
+  if (error) throw new Error(`잔고 입금 실패: ${error.message}`);
+}
+
 export async function getPositionQty(db: SupabaseClient, accountId: string, stockId: string): Promise<number> {
   const { data } = await db
     .from('paper_positions')
