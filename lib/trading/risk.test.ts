@@ -60,4 +60,16 @@ describe('checkRisk', () => {
   it('수량 0 (주문 금액 0) 차단', () => {
     expect(checkRisk({ ...base, orderCost: 0 }).allowed).toBe(false);
   });
+
+  it('시드 0(오염)이어도 손익 0에서 손실 한도 오탐으로 차단하지 않는다', () => {
+    // 0 <= -0 오탐 회귀 방지 — 시드 0이면 주문 크기 한도(0원)에서 걸리는 게 올바른 사유
+    const v = checkRisk({ ...base, seedKrw: 0, dailyRealizedPnl: 0 });
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) expect(v.reason).not.toContain('일간 손실 한도');
+  });
+
+  it('한도 정확히 도달(-lossLimit)은 차단, 1원 모자라면 통과', () => {
+    expect(checkRisk({ ...base, dailyRealizedPnl: -300_000 }).allowed).toBe(false);
+    expect(checkRisk({ ...base, dailyRealizedPnl: -299_999 }).allowed).toBe(true);
+  });
 });

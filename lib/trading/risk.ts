@@ -29,8 +29,9 @@ export function checkRisk(input: RiskInput): RiskVerdict {
 
   if (input.side === 'sell') return { allowed: true };
 
+  // lossLimit이 0(시드 미설정·오염)이면 손익 0에서도 차단(0 <= -0)되는 오탐 → 양수일 때만 판정
   const lossLimit = Math.floor((input.seedKrw * p.dailyLossLimitPct) / 100);
-  if (input.dailyRealizedPnl <= -lossLimit)
+  if (lossLimit > 0 && input.dailyRealizedPnl <= -lossLimit)
     return { allowed: false, reason: `일간 손실 한도 도달 (-${p.dailyLossLimitPct}%) — 당일 신규 진입 중지` };
 
   if (input.alreadyHolding) return { allowed: false, reason: '이미 보유 중인 종목 (중복 진입 금지)' };

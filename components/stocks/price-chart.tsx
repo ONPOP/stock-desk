@@ -21,7 +21,7 @@ import {
 } from 'lightweight-charts';
 import { Button } from '@/components/ui/button';
 import { minorToMajorNumber } from '@/lib/utils/money';
-import { sma, rsi, macd, vwap } from '@/lib/utils/indicators';
+import { sma, rsi, macd, vwap, dedupeSortCandles } from '@/lib/utils/indicators';
 import { dateInTz, KST_TZ } from '@/lib/utils/date';
 import type { Candle, CandleInterval, Currency, Market } from '@/types';
 
@@ -194,9 +194,13 @@ export function PriceChart({ ticker, market, currency, newsMarkers, initialPerio
     if (!candleSeries || !volSeries) return;
 
     const toTime = (ts: string) => Math.floor(new Date(ts).getTime() / 1000) as UTCTimestamp;
-    const times = candles.map((c) => toTime(c.ts));
+    // lightweight-charts는 시각이 '엄격히 증가'해야 함(동일 초 두 개면 assert 실패로 차트 크래시).
+    // 소스가 중복·역순 캔들을 줄 수 있으므로(특히 분봉) 표시 경계에서 정렬+dedupe로 방어.
+    const candlesForChart = dedupeSortCandles(candles, (c) => toTime(c.ts));
+
+    const times = candlesForChart.map((c) => toTime(c.ts));
     candleSeries.setData(
-      candles.map((c) => ({
+      candlesForChart.map((c) => ({
         time: toTime(c.ts),
         open: minorToMajorNumber(c.o, currency),
         high: minorToMajorNumber(c.h, currency),
@@ -205,7 +209,7 @@ export function PriceChart({ ticker, market, currency, newsMarkers, initialPerio
       })),
     );
     volSeries.setData(
-      candles.map((c) => ({
+      candlesForChart.map((c) => ({
         time: toTime(c.ts),
         value: c.volume,
         color: c.c >= c.o ? UP_VOL : DOWN_VOL,
@@ -213,7 +217,7 @@ export function PriceChart({ ticker, market, currency, newsMarkers, initialPerio
     );
 
     // 이평선·RSI (표시용 종가 기준)
-    const closes = candles.map((c) => minorToMajorNumber(c.c, currency));
+    const closes = candlesForChart.map((c) => minorToMajorNumber(c.c, currency));
     const toLine = (vals: Array<number | null>): LineData[] =>
       vals
         .map((v, i) => (v === null ? null : { time: times[i], value: v }))
@@ -223,7 +227,7 @@ export function PriceChart({ ticker, market, currency, newsMarkers, initialPerio
 
     // VWAP — KST 날짜 단위 리셋 (분봉에서 인트라데이 VWAP, 일봉 이상에선 봉별 전형가에 수렴 → 참고용)
     const vwapVals = vwap(
-      candles.map((c) => ({
+      candlesForChart.map((c) => ({
         ts: c.ts,
         h: minorToMajorNumber(c.h, currency),
         l: minorToMajorNumber(c.l, currency),

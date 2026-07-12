@@ -101,6 +101,20 @@ describe('evaluateStrategy — 청산', () => {
     expect(d.reason).toContain('VWAP 하향 이탈');
   });
 
+  it('avgPrice 0(오염 데이터)이면 가짜 익절/손절이 발동하지 않는다', () => {
+    // retPct=Infinity 회귀 방지 — 손익 판정은 중립(0%)으로 처리되어야 함
+    const closes = [...flat(40), ...Array.from({ length: 20 }, (_, i) => 1000 + (i + 1) * 2)];
+    const d = evaluateStrategy({
+      candles: mkCandles(closes),
+      position: { qty: 10, avgPrice: 0 },
+      day: NO_DAY,
+      params: { ...DEFAULT_PARAMS, rsiExit: 101 },
+      now: NOW,
+    });
+    expect(d.action).toBe('hold');
+    expect(d.reason).toBe('보유 유지');
+  });
+
   it('조건 미충족이면 보유 유지', () => {
     // 완만한 상승 지속: VWAP 상방·MACD 양(+) 유지·손익 0% — RSI 과열만 파라미터로 끔
     const closes = [...flat(40), ...Array.from({ length: 20 }, (_, i) => 1000 + (i + 1) * 2)];

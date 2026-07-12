@@ -1,6 +1,17 @@
 // 기술지표 계산 (F14, D15 자동매매) — SMA, EMA, RSI(Wilder), MACD, VWAP. 순수 함수.
 // 입력 스케일 무관(표시용 숫자·최소단위 정수 모두 허용 — 비율/비교 연산만 수행), 출력은 정렬 보존(없는 구간 null).
 
+/**
+ * 캔들을 시각 오름차순 정렬 + 동일 초 중복 제거(마지막 값 우선).
+ * lightweight-charts는 '엄격히 증가'하는 시각을 요구 — 중복이 있으면 assert로 차트가 죽는다.
+ * 어떤 시세 소스가 중복·역순을 주더라도 표시 경계에서 방어. tsSeconds는 ts→초 변환기.
+ */
+export function dedupeSortCandles<T>(candles: T[], tsSeconds: (c: T) => number): T[] {
+  const byTime = new Map<number, T>();
+  for (const c of candles) byTime.set(tsSeconds(c), c);
+  return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c);
+}
+
 /** 단순이동평균 — period 미만 구간은 null */
 export function sma(values: number[], period: number): Array<number | null> {
   if (period < 1) throw new Error('period는 1 이상이어야 합니다.');

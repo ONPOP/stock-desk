@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { sma, rsi, ema, macd, vwap, type VwapCandle } from './indicators';
+import { sma, rsi, ema, macd, vwap, dedupeSortCandles, type VwapCandle } from './indicators';
+
+describe('dedupeSortCandles', () => {
+  const ts = (c: { t: number }) => c.t;
+  it('시각 오름차순 정렬', () => {
+    expect(dedupeSortCandles([{ t: 3 }, { t: 1 }, { t: 2 }], ts).map((c) => c.t)).toEqual([1, 2, 3]);
+  });
+  it('동일 시각은 마지막 값 우선(중복 제거)', () => {
+    const r = dedupeSortCandles([{ t: 1, v: 'a' }, { t: 1, v: 'b' }, { t: 2, v: 'c' }], (c) => c.t);
+    expect(r).toEqual([{ t: 1, v: 'b' }, { t: 2, v: 'c' }]);
+  });
+  it('빈 배열', () => {
+    expect(dedupeSortCandles([], ts)).toEqual([]);
+  });
+  it('결과는 엄격히 증가 (lightweight-charts 요구조건)', () => {
+    const r = dedupeSortCandles([{ t: 5 }, { t: 5 }, { t: 3 }, { t: 3 }, { t: 9 }], ts).map((c) => c.t);
+    for (let i = 1; i < r.length; i++) expect(r[i]).toBeGreaterThan(r[i - 1]);
+  });
+});
 
 describe('sma', () => {
   it('period 미만은 null, 이후 평균', () => {

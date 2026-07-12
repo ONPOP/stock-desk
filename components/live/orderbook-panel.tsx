@@ -78,6 +78,8 @@ export function OrderbookPanel({ ticker }: { ticker: string }) {
         <p className="p-3 text-xs text-muted-foreground">{error}</p>
       ) : !book ? (
         <p className="p-3 text-xs text-muted-foreground">불러오는 중…</p>
+      ) : book.asks.length === 0 && book.bids.length === 0 ? (
+        <p className="p-3 text-xs text-muted-foreground">호가 정보가 없습니다 (장 마감·거래정지).</p>
       ) : (
         <div className="py-1">
           {/* 매도호가 — 높은 가격이 위 (ask10 → ask1) */}

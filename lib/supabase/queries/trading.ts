@@ -2,6 +2,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DEFAULT_PARAMS } from '@/lib/trading/strategy';
+import { strategyParamsSchema, universeSchema } from '@/lib/validation/trading';
 import type { AutoTradingConfig, Market, StrategyParams, TradeSignalRow, TradingUniverseItem } from '@/types';
 
 interface ConfigRow {
@@ -12,7 +13,12 @@ interface ConfigRow {
   updated_at: string | null;
 }
 
-/** 설정 조회 — 없으면 기본값 반환(행 생성은 첫 저장 시). params는 DEFAULT와 병합 */
+/**
+ * 설정 조회 — 없으면 기본값 반환(행 생성은 첫 저장 시).
+ * DB jsonb는 신뢰 경계 밖으로 취급: RLS가 본인 행 직접 쓰기(PostgREST)를 허용하므로
+ * API를 우회해 심어둔 악성 params/universe가 엔진에 그대로 흘러들지 않게 여기서 재검증한다.
+ * params는 DEFAULT 병합 후 무효면 DEFAULT로 폴백, universe는 스키마 위반 시 빈 목록.
+ */
 export async function getTradingConfig(db: SupabaseClient, userId: string): Promise<AutoTradingConfig> {
   const { data, error } = await db
     .from('auto_trading_configs')
@@ -20,11 +26,14 @@ export async function getTradingConfig(db: SupabaseClient, userId: string): Prom
     .eq('user_id', userId)
     .maybeSingle<ConfigRow>();
   if (error) throw new Error(`자동매매 설정 조회 실패: ${error.message}`);
+
+  const mergedParams = strategyParamsSchema.safeParse({ ...DEFAULT_PARAMS, ...(data?.params ?? {}) });
+  const universe = universeSchema.safeParse(data?.universe ?? []);
   return {
     enabled: data?.enabled ?? false,
     killSwitch: data?.kill_switch ?? false,
-    params: { ...DEFAULT_PARAMS, ...(data?.params ?? {}) },
-    universe: data?.universe ?? [],
+    params: mergedParams.success ? mergedParams.data : { ...DEFAULT_PARAMS },
+    universe: universe.success ? universe.data : [],
     updatedAt: data?.updated_at ?? null,
   };
 }

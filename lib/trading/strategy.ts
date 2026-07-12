@@ -101,7 +101,8 @@ export function evaluateStrategy(input: StrategyInput): Decision {
 
   // ── 보유 중 → 청산 판정 (우선순위: 시간 > 손절 > 익절 > 과열 > VWAP 이탈 > 모멘텀)
   if (position && position.qty > 0) {
-    const retPct = ((close - position.avgPrice) / position.avgPrice) * 100;
+    // avgPrice 0/음수(데이터 오염)면 ±Infinity로 가짜 손절/익절이 발동 → 손익 판정만 중립(0%) 처리
+    const retPct = position.avgPrice > 0 ? ((close - position.avgPrice) / position.avgPrice) * 100 : 0;
     snapshot.returnPct = retPct;
 
     if (minutes >= exitMin) return { action: 'sell', reason: `시간 청산 (${p.exitTimeKst} KST)`, indicators: snapshot };
