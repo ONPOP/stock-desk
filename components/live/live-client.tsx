@@ -8,6 +8,8 @@ import { OrderbookPanel } from '@/components/live/orderbook-panel';
 import { QuickOrder } from '@/components/live/quick-order';
 import { AutoTradePanel } from '@/components/live/auto-trade-panel';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useRealtimeQuote } from '@/lib/hooks/use-realtime-quote';
+import { RealtimeProvider } from '@/lib/realtime/provider';
 import { formatMoney, formatCompactMoney } from '@/lib/utils/money';
 import { cn } from '@/lib/utils';
 import type { AutoTradingConfig, TradeSignalRow, WatchlistItem } from '@/types';
@@ -46,7 +48,8 @@ function WatchRow({ item, selected, onSelect }: { item: WatchlistItem; selected:
 }
 
 function QuoteHeader({ item }: { item: WatchlistItem }) {
-  const { quote, source } = useQuote(item.ticker, item.market);
+  // 선택 종목 → 실시간(high 우선). 릴레이 미가동 시 폴링 폴백.
+  const { quote, source, realtime } = useRealtimeQuote(item.ticker, item.market, item.currency, { priority: 'high' });
   const name = item.name_kr ?? item.name_en ?? item.ticker;
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -54,6 +57,11 @@ function QuoteHeader({ item }: { item: WatchlistItem }) {
       <span className="text-xs text-muted-foreground">
         {item.ticker} · {item.market}
       </span>
+      {realtime && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-up/10 px-2 py-0.5 text-[10px] font-semibold text-up">
+          <span className="size-1.5 animate-pulse rounded-full bg-up" /> 실시간
+        </span>
+      )}
       {quote && (
         <>
           <span className={cn('text-xl font-bold tabular-nums', changeColor(quote.change))}>
@@ -65,7 +73,7 @@ function QuoteHeader({ item }: { item: WatchlistItem }) {
           </span>
           <span className="text-xs text-muted-foreground">
             거래량 {quote.volume.toLocaleString('ko-KR')} · 거래대금{' '}
-            {formatCompactMoney(quote.price * quote.volume, item.currency)} · {source?.toUpperCase()}
+            {formatCompactMoney(quote.price * quote.volume, item.currency)} · {source}
           </span>
         </>
       )}
@@ -95,6 +103,7 @@ export function LiveClient({
   }
 
   return (
+    <RealtimeProvider>
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
         {/* 좌: 관심종목 (국내) */}
@@ -143,5 +152,6 @@ export function LiveClient({
       {/* 하: 자동매매 컨트롤 + 시그널 로그 + 백테스트 */}
       <AutoTradePanel items={items} initialConfig={initialConfig} initialSignals={initialSignals} selected={selected} />
     </div>
+    </RealtimeProvider>
   );
 }

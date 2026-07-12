@@ -8,14 +8,18 @@ const net = require('net');
 const { fork } = require('child_process');
 
 let serverProcess = null;
+let relayProcess = null;
 let mainWindow = null;
 
-// 패키징 여부에 따라 standalone 서버·env 파일 경로를 결정한다.
+const REALTIME_PORT = Number(process.env.NEXT_PUBLIC_REALTIME_PORT || 17099);
+
+// 패키징 여부에 따라 standalone 서버·릴레이·env 파일 경로를 결정한다.
 function resolvePaths() {
   if (app.isPackaged) {
     const res = process.resourcesPath;
     return {
       server: path.join(res, 'standalone', 'server.js'),
+      relay: path.join(res, 'standalone', 'realtime-relay.cjs'),
       cwd: path.join(res, 'standalone'),
       envFile: path.join(res, 'app.env'),
     };
@@ -23,6 +27,7 @@ function resolvePaths() {
   const root = path.join(__dirname, '..');
   return {
     server: path.join(root, '.next', 'standalone', 'server.js'),
+    relay: path.join(root, '.next', 'standalone', 'realtime-relay.cjs'),
     cwd: path.join(root, '.next', 'standalone'),
     envFile: path.join(root, '.env.local'),
   };
@@ -102,6 +107,33 @@ async function startServer() {
   return port;
 }
 
+// 실시간 릴레이 프로세스 — KIS WS ↔ 렌더러 중계(데스크톱 전용). 실패해도 앱은 폴링 폴백으로 동작.
+function startRelay() {
+  const { relay, cwd, envFile } = resolvePaths();
+  if (!fs.existsSync(relay)) {
+    console.warn('[relay] realtime-relay.cjs 없음 — 실시간 비활성(폴링 폴백). `npm run build:relay` 필요');
+    return;
+  }
+  const env = loadEnv(envFile);
+  relayProcess = fork(relay, [], {
+    cwd,
+    env: {
+      ...process.env,
+      ...env,
+      NEXT_PUBLIC_REALTIME_PORT: String(REALTIME_PORT),
+      KIS_WS_MODE: env.KIS_WS_MODE || 'vts', // 데스크톱 기본 = 모의 KIS WS
+      ELECTRON_RUN_AS_NODE: '1',
+    },
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  relayProcess.stdout?.on('data', (d) => console.log('[relay]', d.toString().trim()));
+  relayProcess.stderr?.on('data', (d) => console.error('[relay]', d.toString().trim()));
+  relayProcess.on('exit', (code) => {
+    console.warn(`[relay] 종료(code=${code})`);
+    relayProcess = null;
+  });
+}
+
 async function createWindow() {
   let port;
   try {
@@ -111,6 +143,7 @@ async function createWindow() {
     app.quit();
     return;
   }
+  startRelay(); // 실시간 릴레이(실패해도 앱은 계속)
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -141,6 +174,10 @@ function shutdown() {
   if (serverProcess) {
     serverProcess.kill();
     serverProcess = null;
+  }
+  if (relayProcess) {
+    relayProcess.kill();
+    relayProcess = null;
   }
 }
 

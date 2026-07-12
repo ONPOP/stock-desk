@@ -8,12 +8,28 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { useRealtimeQuote } from '@/lib/hooks/use-realtime-quote';
 import { formatMoney } from '@/lib/utils/money';
 import { formatKst, dateInTz, KST_TZ } from '@/lib/utils/date';
 import { cn } from '@/lib/utils';
 import type { AutoTradingConfig, BacktestResult, StrategyParams, TradeSignalRow, WatchlistItem } from '@/types';
 
 const TICK_MS = 10_000;
+
+// 유니버스 칩 실시간 시세 — on(감시 중)일 때만 마운트되어 구독(우선순위 normal, 폴링 폴백 없음).
+function ChipLivePrice({ item }: { item: WatchlistItem }) {
+  const { quote, realtime } = useRealtimeQuote(item.ticker, item.market, item.currency, {
+    priority: 'normal',
+    fallbackPolling: false,
+  });
+  if (!quote) return null;
+  return (
+    <span className="ml-1 inline-flex items-center gap-1 tabular-nums opacity-90">
+      {realtime && <span className="size-1 animate-pulse rounded-full bg-current" />}
+      {formatMoney(quote.price, item.currency)}
+    </span>
+  );
+}
 
 // 파라미터 편집 필드 정의 — 라벨·그룹만 UI 관심사, 범위 검증은 서버(zod) 단일 원천
 const PARAM_GROUPS: Array<{ title: string; fields: Array<{ key: keyof StrategyParams; label: string }> }> = [
@@ -256,6 +272,7 @@ export function AutoTradePanel({
                 )}
               >
                 {item.name_kr ?? item.ticker}
+                {on && <ChipLivePrice item={item} />}
               </button>
             );
           })}

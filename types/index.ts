@@ -565,3 +565,36 @@ export interface Orderbook {
   totalBidQty: number;
   asOf: string;
 }
+
+// ───────────────────────── 실시간(WebSocket) — 데스크톱 전용, 모의 시세 ─────────────────────────
+
+/** KIS 실시간 체결가(H0STCNT0) 정규화 틱 — 가격은 최소 단위 정수(원) */
+export interface RealtimeTick {
+  ticker: string;
+  price: number;
+  /** 전일 대비 (부호 있는 정수) */
+  change: number;
+  /** 등락률(%) 문자열 — 부동소수점 연산 금지 */
+  changeRate: string;
+  /** 누적 거래량 */
+  volume: number;
+  /** 체결 시각 HHMMSS (KST) */
+  cntgTime: string;
+  /** 수신 시각 UTC ISO */
+  asOf: string;
+}
+
+/** KIS 실시간 호가(H0STASP0) 정규화 — Orderbook과 동일 형태 재사용 */
+export type RealtimeOrderbook = Orderbook;
+
+/** 렌더러 → 릴레이: 구독 희망 종목 집합(≤5) 갱신 */
+export interface RealtimeSubscribeMsg {
+  type: 'subscribe';
+  tickers: string[];
+}
+
+/** 릴레이 → 렌더러 메시지 */
+export type RealtimeServerMsg =
+  | { type: 'tick'; data: RealtimeTick }
+  | { type: 'orderbook'; data: RealtimeOrderbook }
+  | { type: 'status'; connected: boolean; mode: 'live' | 'mock'; subscribed: string[] };
