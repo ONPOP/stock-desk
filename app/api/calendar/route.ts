@@ -1,9 +1,9 @@
-// 캘린더 (F2) — GET(범위 목록), POST(수동 일정 또는 ?refresh=true 수집), DELETE(삭제).
+// 캘린더 (F2) — GET(범위 목록), POST(수동 일정 또는 ?refresh=true 수집), PATCH(수정), DELETE(삭제).
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { toErrorResponse, ValidationError } from '@/lib/errors';
 import { requireUser } from '@/lib/supabase/server';
-import { listEvents, createEvent, deleteEvent } from '@/lib/supabase/queries/calendar';
+import { listEvents, createEvent, updateEvent, deleteEvent } from '@/lib/supabase/queries/calendar';
 import { refreshCalendar } from '@/lib/services/calendar';
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '날짜 형식은 YYYY-MM-DD 입니다.');
@@ -11,11 +11,21 @@ const createSchema = z
   .object({
     title: z.string().trim().min(1, '제목을 입력해주세요.').max(100),
     event_date: dateSchema,
-    type: z.enum(['macro', 'earnings', 'custom']).optional(),
+    type: z.enum(['macro', 'earnings', 'custom', 'options', 'dividend']).optional(),
     stock_id: z.string().uuid().nullable().optional(),
     memo: z.string().trim().max(500).nullable().optional(),
   })
   .strict();
+
+const updateSchema = z
+  .object({
+    title: z.string().trim().min(1, '제목을 입력해주세요.').max(100).optional(),
+    event_date: dateSchema.optional(),
+    type: z.enum(['macro', 'earnings', 'custom', 'options', 'dividend']).optional(),
+    memo: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, '수정할 내용이 없습니다.');
 
 function monthRange(): { from: string; to: string } {
   const now = new Date();
@@ -59,6 +69,28 @@ export async function POST(req: Request) {
       eventDate: parsed.data.event_date,
       type: parsed.data.type,
       stockId: parsed.data.stock_id,
+      memo: parsed.data.memo,
+    });
+    return NextResponse.json({ event });
+  } catch (e) {
+    const { body, status } = toErrorResponse(e);
+    return NextResponse.json(body, { status });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const { supabase, user } = await requireUser();
+    const id = new URL(req.url).searchParams.get('id');
+    const idParsed = z.string().uuid().safeParse(id);
+    if (!idParsed.success) throw new ValidationError('수정할 일정 ID가 올바르지 않습니다.');
+    const json = await req.json().catch(() => null);
+    const parsed = updateSchema.safeParse(json);
+    if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다.');
+    const event = await updateEvent(supabase, user.id, idParsed.data, {
+      title: parsed.data.title,
+      eventDate: parsed.data.event_date,
+      type: parsed.data.type,
       memo: parsed.data.memo,
     });
     return NextResponse.json({ event });

@@ -3,6 +3,7 @@
 import 'server-only';
 import Decimal from 'decimal.js';
 import { fetchYahooJson } from './client';
+import { fetchUsdKrwFallback } from '@/lib/providers/forex/usd-krw';
 import type { MarketIndex } from '@/types';
 
 const INDICES = [
@@ -26,7 +27,10 @@ interface ChartResponse {
 
 const CACHE_TTL_MS = 30_000;
 const STALE_MAX_MS = 10 * 60_000;
-let cache: { data: MarketIndex[]; at: number } | null = null;
+// 항목별 마지막 성공값 — 일부 심볼이 레이트리밋으로 빠져도 직전값으로 보충해 환율 등 핵심값이 사라지지 않게 한다.
+const itemCache = new Map<string, { item: MarketIndex; at: number }>();
+let lastFetchAt = 0;
+let lastResult: MarketIndex[] = [];
 
 async function fetchOne(idx: (typeof INDICES)[number]): Promise<MarketIndex | null> {
   const path = `/v8/finance/chart/${encodeURIComponent(idx.symbol)}?interval=1d&range=1d`;
@@ -49,19 +53,38 @@ async function fetchOne(idx: (typeof INDICES)[number]): Promise<MarketIndex | nu
 
 export async function getMarketIndices(): Promise<MarketIndex[]> {
   const now = Date.now();
-  if (cache && now - cache.at < CACHE_TTL_MS) return cache.data;
+  if (now - lastFetchAt < CACHE_TTL_MS) return lastResult;
 
   const settled = await Promise.allSettled(INDICES.map(fetchOne));
-  const data = settled
+  const fresh = settled
     .filter((r): r is PromiseFulfilledResult<MarketIndex | null> => r.status === 'fulfilled')
     .map((r) => r.value)
     .filter((x): x is MarketIndex => x !== null);
 
-  // 전부 실패(레이트리밋 등)면 너무 오래되지 않은 캐시로 버틴다
-  if (data.length === 0) {
-    if (cache && now - cache.at < STALE_MAX_MS) return cache.data;
-    return [];
+  // 이번에 성공한 항목만 캐시 갱신(타임스탬프 포함). 빠진 항목은 직전 성공값을 유지한다.
+  for (const d of fresh) itemCache.set(d.key, { item: d, at: now });
+
+  // 환율은 통화 환산의 핵심값 — Yahoo가 못 줬고 신선 캐시도 없으면 무료 폴백 소스로 보강한다.
+  const cachedFx = itemCache.get('usdkrw');
+  if (!cachedFx || now - cachedFx.at >= CACHE_TTL_MS) {
+    const fb = await fetchUsdKrwFallback();
+    if (fb) {
+      const meta = INDICES.find((i) => i.key === 'usdkrw');
+      if (meta) {
+        itemCache.set('usdkrw', {
+          item: { key: 'usdkrw', label: meta.label, value: fb, change: 0, changeRate: '0.00', unit: meta.unit },
+          at: now,
+        });
+      }
+    }
   }
-  cache = { data, at: now };
+
+  // 신선값 + STALE_MAX_MS 이내 직전값으로 보충(부분 실패 방어). 너무 오래된 항목은 제외해 부정확값을 막는다.
+  const data = INDICES.map((i) => itemCache.get(i.key))
+    .filter((c): c is { item: MarketIndex; at: number } => c !== undefined && now - c.at < STALE_MAX_MS)
+    .map((c) => c.item);
+
+  lastFetchAt = now;
+  lastResult = data;
   return data;
 }

@@ -27,10 +27,22 @@ async function main() {
   const corpByStock = new Map(entries.map((e) => [e.stockCode, e.corpCode]));
   console.log(`  상장사 ${entries.length.toLocaleString()}건 로드`);
 
-  const { data, error } = await admin.from('stocks').select('id, ticker').in('market', ['KOSPI', 'KOSDAQ']);
-  if (error) throw new Error(error.message);
-  const targets = (data ?? [])
-    .map((s) => ({ id: s.id as string, corpCode: corpByStock.get(String(s.ticker)) }))
+  // PostgREST 기본 1000행 제한 → 페이지네이션으로 전체 KR 종목(수천 건) 조회
+  const rows: Array<{ id: string; ticker: string }> = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('stocks')
+      .select('id, ticker')
+      .in('market', ['KOSPI', 'KOSDAQ'])
+      .order('id')
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as Array<{ id: string; ticker: string }>));
+    if (!data || data.length < PAGE) break;
+  }
+  const targets = rows
+    .map((s) => ({ id: s.id, corpCode: corpByStock.get(String(s.ticker)) }))
     .filter((t): t is { id: string; corpCode: string } => !!t.corpCode);
 
   let updated = 0;
@@ -44,7 +56,7 @@ async function main() {
       }),
     );
   }
-  console.log(`✅ corp_code 매핑 ${updated.toLocaleString()}건 / 한국 종목 ${data?.length.toLocaleString()}건`);
+  console.log(`✅ corp_code 매핑 ${updated.toLocaleString()}건 / 한국 종목 ${rows.length.toLocaleString()}건`);
 }
 
 main();

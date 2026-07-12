@@ -1,3 +1,5 @@
+/* 메모장 전용 Pretendard (오프라인 시 시스템 sans 폴백) — @import는 최상단 유지 */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -171,4 +173,22 @@
   }
   /* 숫자 공통: 등폭 + tabular (시세·금액 정렬) */
   .tabular-nums { font-variant-numeric: tabular-nums; }
+}
+
+/* 마스코트 펫 애니메이션 — 수익률 기분별(idle 상하·happy 점프·sad 흔들) */
+@keyframes pet-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes pet-jump { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-14px); } }
+@keyframes pet-shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+.pet-idle { animation: pet-bob 3s ease-in-out infinite; transform-origin: center bottom; }
+.pet-happy { animation: pet-jump 0.7s ease-in-out infinite; transform-origin: center bottom; }
+.pet-sad { animation: pet-shake 2.2s ease-in-out infinite; transform-origin: center bottom; }
+@media (prefers-reduced-motion: reduce) {
+  .pet-idle, .pet-happy, .pet-sad { animation: none; }
+}
+
+/* 메모장 빈 상태 플레이스홀더 */
+.memo-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  pointer-events: none;
 }

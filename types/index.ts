@@ -50,6 +50,14 @@ export interface StockSearchResult {
   currency: Currency;
 }
 
+/** 워치리스트 탭(컬렉션) — 내 종목을 탭 단위로 분리 관리. 기본 탭은 삭제·이름변경 불가 */
+export interface WatchlistTab {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  sortOrder: number;
+}
+
 /** 워치리스트 항목 — 종목 정보 + 그룹/자동분석 플래그 */
 export interface WatchlistItem {
   stock_id: string;
@@ -236,6 +244,7 @@ export interface RealTrade {
   tradeDate: string; // YYYY-MM-DD
   memo: string | null;
   isEtf: boolean; // 국내 ETF 여부(매도 거래세 면제). 기본 false
+  fee: number; // 매매비용(세금+수수료, 최소 단위 정수). 매도 시 실현손익에서 차감. 기본 0
   createdAt: string;
 }
 
@@ -263,9 +272,11 @@ export interface RealizedTrade {
   qty: number;
   sellPrice: number;
   avgBuyPrice: number; // 매도 시점 평단가
-  realizedPnl: number; // (sellPrice - avgBuyPrice) * qty
-  realizedRate: number; // %
-  tradeDate: string;
+  fee: number; // 매매비용(세금+수수료, 최소 단위). 실현손익에서 차감됨
+  realizedPnl: number; // (sellPrice - avgBuyPrice) * qty - fee
+  realizedRate: number; // % (매매비용 차감 후 순수익률)
+  buyDate: string; // 보유 구간 최초 매수일(YYYY-MM-DD). 매수 기록 없으면 ''
+  tradeDate: string; // 매도일(수익 실현일)
 }
 
 /** 통화별 합계 */
@@ -402,7 +413,7 @@ export interface AiAnalysis {
 
 // ───────────────────────── 캘린더 (V1 F2) ─────────────────────────
 
-export type CalendarEventType = 'macro' | 'earnings' | 'custom';
+export type CalendarEventType = 'macro' | 'earnings' | 'custom' | 'options' | 'dividend';
 
 export interface CalendarEvent {
   id: string;
@@ -415,6 +426,9 @@ export interface CalendarEvent {
   confirmed: boolean;
   source: string | null;
   memo: string | null;
+  /** 종목 일정일 때 표시·필터용 (조인) */
+  ticker?: string | null;
+  name?: string | null;
 }
 
 /** API 사용량 집계 1행 */

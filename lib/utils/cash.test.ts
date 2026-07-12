@@ -30,6 +30,7 @@ function tr(p: Partial<RealTrade> & Pick<RealTrade, 'side' | 'qty' | 'price'>): 
     tradeDate: p.tradeDate ?? '2026-01-01',
     memo: null,
     isEtf: p.isEtf ?? false,
+    fee: p.fee ?? 0,
     createdAt: p.createdAt ?? `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
   };
 }

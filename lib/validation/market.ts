@@ -27,23 +27,33 @@ export const candleQuerySchema = z.object({
   count: countSchema.default(120),
 });
 
+// 워치리스트 탭(컬렉션) id·이름
+export const watchlistIdSchema = z.string().uuid('watchlist_id 형식이 올바르지 않습니다.');
+const watchlistNameSchema = z
+  .string()
+  .trim()
+  .min(1, '탭 이름을 입력해주세요.')
+  .max(30, '탭 이름은 30자 이내여야 합니다.');
+
 export const watchlistAddSchema = z.object({
+  watchlist_id: watchlistIdSchema,
   ticker: tickerSchema,
   market: marketSchema,
-  group_name: z.string().trim().max(30, '그룹명이 너무 깁니다.').optional(),
 });
 
-// 워치리스트 PATCH — 즐겨찾기 토글 또는 그룹 내 순서 재정렬(둘 중 하나).
+// 워치리스트 PATCH — 즐겨찾기 토글 또는 탭 내 순서 재정렬(둘 중 하나).
 const stockIdSchema = z.string().uuid('stock_id 형식이 올바르지 않습니다.');
 
 export const watchlistFavoriteSchema = z.object({
   action: z.literal('favorite'),
+  watchlist_id: watchlistIdSchema,
   stock_id: stockIdSchema,
   value: z.boolean(),
 });
 
 export const watchlistReorderSchema = z.object({
   action: z.literal('reorder'),
+  watchlist_id: watchlistIdSchema,
   orders: z
     .array(z.object({ stock_id: stockIdSchema, sort_order: z.number().int().min(0).max(9999) }))
     .min(1, '정렬 대상이 없습니다.')
@@ -53,4 +63,26 @@ export const watchlistReorderSchema = z.object({
 export const watchlistPatchSchema = z.discriminatedUnion('action', [
   watchlistFavoriteSchema,
   watchlistReorderSchema,
+]);
+
+// ───────────────────────── 탭 CRUD ─────────────────────────
+export const watchlistCreateSchema = z.object({ name: watchlistNameSchema });
+
+export const watchlistTabRenameSchema = z.object({
+  action: z.literal('rename'),
+  id: watchlistIdSchema,
+  name: watchlistNameSchema,
+});
+
+export const watchlistTabReorderSchema = z.object({
+  action: z.literal('reorder'),
+  orders: z
+    .array(z.object({ id: watchlistIdSchema, sort_order: z.number().int().min(0).max(9999) }))
+    .min(1, '정렬 대상이 없습니다.')
+    .max(50, '탭이 너무 많습니다.'),
+});
+
+export const watchlistTabPatchSchema = z.discriminatedUnion('action', [
+  watchlistTabRenameSchema,
+  watchlistTabReorderSchema,
 ]);

@@ -48,6 +48,7 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [qty, setQty] = useState('');
+  const [fee, setFee] = useState(''); // 매도 매매비용(세금+수수료). 표시 단위
   const [date, setDate] = useState(todayLocal);
   const [isEtf, setIsEtf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -77,12 +78,21 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
       toast.error('수량을 올바르게 입력하세요.');
       return;
     }
+    // 매매비용(매도 시만) — 비워두면 0. 최소 단위 정수로 변환.
+    let feeMinor = 0;
+    if (side === 'sell' && fee.trim() !== '') {
+      if (!NUM.test(fee.trim())) {
+        toast.error('매매비용을 올바르게 입력하세요.');
+        return;
+      }
+      feeMinor = new Decimal(fee.trim()).mul(stock.currency === 'USD' ? 100 : 1).toDecimalPlaces(0).toNumber();
+    }
     setSubmitting(true);
     try {
       const res = await fetch('/api/trades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stockId: stock.id, side, qty: q, price: priceMinor, tradeDate: date, isEtf: isKr ? isEtf : false }),
+        body: JSON.stringify({ stockId: stock.id, side, qty: q, price: priceMinor, tradeDate: date, isEtf: isKr ? isEtf : false, fee: feeMinor }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -92,6 +102,7 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
       setTrades((prev) => [data.trade as RealTrade, ...prev]);
       setPrice('');
       setQty('');
+      setFee('');
       toast.success(side === 'buy' ? '매수 기록을 추가했습니다.' : '매도 기록을 추가했습니다.');
     } catch {
       toast.error('네트워크 오류로 저장하지 못했습니다.');
@@ -197,6 +208,19 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
             <Input id="t-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
+        {side === 'sell' && (
+          <div className="space-y-1.5">
+            <Label htmlFor="t-fee">매매비용 (세금+수수료, {unit})</Label>
+            <Input
+              id="t-fee"
+              inputMode="decimal"
+              value={fee}
+              onChange={(e) => setFee(e.target.value)}
+              placeholder={cur === 'USD' ? '예: 1.50 (선택)' : '예: 78000 (선택)'}
+            />
+            <p className="text-[11px] text-muted-foreground">입력 시 실현 손익에서 차감됩니다. 비워두면 0.</p>
+          </div>
+        )}
         {isKr && (
           <button
             type="button"
@@ -239,6 +263,7 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                       {t.tradeDate}
+                      {t.side === 'sell' && t.fee > 0 && <span className="ml-2">비용 {formatMoney(t.fee, cur)}</span>}
                       {t.side === 'sell' && realized && (
                         <span className={`ml-2 ${pnlColor(realized.pnl)}`}>
                           실현 {realized.pnl > 0 ? '+' : ''}

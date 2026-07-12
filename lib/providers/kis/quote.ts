@@ -21,9 +21,22 @@ interface DomesticPriceOutput {
 
 interface OverseasPriceOutput {
   last: string;
-  diff: string;
-  rate: string;
+  diff: string; // 전일 대비 — KIS 해외는 부호 없는 절대값으로 응답
+  rate: string; // 등락률 — KIS 해외는 +/- 부호를 포함해 응답
+  sign?: string; // 대비기호 1상한 2상승 3보합 4하한 5하락 (있으면 방향 판정 우선)
   tvol: string;
+}
+
+// KIS 해외 시세는 국내와 달리 diff(전일대비)를 부호 없는 절대값으로, rate(등락률)를 +/- 부호 포함으로 준다.
+// 표시 규약(change=부호 있는 수, changeRate=양수 무부호·음수 '-')을 국내/Yahoo와 맞추기 위해 등락 방향을 단일 판정한다.
+function overseasDirection(out: OverseasPriceOutput): number {
+  const code = (out.sign ?? '').trim();
+  if (code === '4' || code === '5') return -1; // 하한·하락
+  if (code === '1' || code === '2') return 1; // 상한·상승
+  if (code === '3') return 0; // 보합
+  // sign 코드가 없으면 rate/diff 문자열의 부호로 폴백
+  if (`${out.rate ?? ''}${out.diff ?? ''}`.includes('-')) return -1;
+  return Number((out.rate ?? '0').replace(/[+,\s]/g, '')) > 0 ? 1 : 0;
 }
 
 function requireFields<T extends object>(output: T | undefined, fields: string[], context: string): T {
@@ -75,13 +88,16 @@ export async function getOverseasQuote(client: KisClient, ticker: string, market
     params: { AUTH: '', EXCD: excd, SYMB: ticker },
   });
   const out = requireFields(data.output, ['last'], `overseas quote ${ticker}`);
+  const dir = overseasDirection(out);
+  const diffAbs = Math.abs(parseToMinorUnits(out.diff ?? '0', 'USD'));
+  const rateAbs = (out.rate ?? '0').trim().replace(/^[+-]/, '');
   return {
     ticker,
     market,
     currency: 'USD',
     price: parseToMinorUnits(out.last, 'USD'),
-    change: parseToMinorUnits(out.diff ?? '0', 'USD'),
-    changeRate: (out.rate ?? '0').trim(),
+    change: dir * diffAbs,
+    changeRate: dir < 0 ? `-${rateAbs}` : rateAbs,
     volume: Number(out.tvol ?? 0),
     asOf: new Date().toISOString(),
   };

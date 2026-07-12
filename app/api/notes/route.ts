@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { toErrorResponse, ValidationError } from '@/lib/errors';
 import { requireUser } from '@/lib/supabase/server';
-import { listNotes, createNote, deleteNote } from '@/lib/supabase/queries/notes';
-import { noteCreateSchema, noteQuerySchema } from '@/lib/validation/note';
+import { listNotes, createNote, updateNote, deleteNote } from '@/lib/supabase/queries/notes';
+import { noteCreateSchema, noteUpdateSchema, noteQuerySchema } from '@/lib/validation/note';
 
 export async function GET(req: Request) {
   try {
@@ -30,6 +30,23 @@ export async function POST(req: Request) {
     const parsed = noteCreateSchema.safeParse(json);
     if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다.');
     const note = await createNote(supabase, user.id, parsed.data);
+    return NextResponse.json({ note });
+  } catch (e) {
+    const { body, status } = toErrorResponse(e);
+    return NextResponse.json(body, { status });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const { supabase, user } = await requireUser();
+    const id = new URL(req.url).searchParams.get('id');
+    const idParsed = z.string().uuid().safeParse(id);
+    if (!idParsed.success) throw new ValidationError('수정할 노트 ID가 올바르지 않습니다.');
+    const json = await req.json().catch(() => null);
+    const parsed = noteUpdateSchema.safeParse(json);
+    if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다.');
+    const note = await updateNote(supabase, user.id, idParsed.data, parsed.data.content_md);
     return NextResponse.json({ note });
   } catch (e) {
     const { body, status } = toErrorResponse(e);

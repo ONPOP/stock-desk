@@ -8,6 +8,8 @@ const DOT: Record<CalendarEventType, string> = {
   macro: 'bg-chart-2',
   earnings: 'bg-up',
   custom: 'bg-primary',
+  options: 'bg-amber-500',
+  dividend: 'bg-emerald-500',
 };
 
 export function ScheduleTile({ events }: { events: CalendarEvent[] }) {

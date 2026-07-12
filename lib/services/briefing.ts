@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { DomainError } from '@/lib/errors';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 import { getOpenaiKey } from '@/lib/supabase/queries/settings';
-import { listWatchlist } from '@/lib/supabase/queries/watchlist';
+import { listAllWatchlistItems } from '@/lib/supabase/queries/watchlist';
 import { getNewsByStock } from '@/lib/supabase/queries/news';
 import { getMarketIndices } from '@/lib/providers/yahoo/market-index';
 import { generateBriefingMd } from '@/lib/ai/summarize';
@@ -46,7 +46,7 @@ async function getUpcomingEvents(
 async function buildContext(db: SupabaseClient, userId: string, dateLabel: string): Promise<BriefingContext> {
   const [indices, watchlist] = await Promise.all([
     getMarketIndices().catch(() => []),
-    listWatchlist(db, userId),
+    listAllWatchlistItems(db, userId),
   ]);
   const watchlistNews = await Promise.all(
     watchlist.slice(0, 10).map(async (w) => ({
