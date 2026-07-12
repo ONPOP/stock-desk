@@ -21,7 +21,8 @@ import {
 } from 'lightweight-charts';
 import { Button } from '@/components/ui/button';
 import { minorToMajorNumber } from '@/lib/utils/money';
-import { sma, rsi } from '@/lib/utils/indicators';
+import { sma, rsi, macd, vwap } from '@/lib/utils/indicators';
+import { dateInTz, KST_TZ } from '@/lib/utils/date';
 import type { Candle, CandleInterval, Currency, Market } from '@/types';
 
 interface Period {
@@ -60,15 +61,23 @@ export interface PriceChartProps {
   currency: Currency;
   /** F17 뉴스↔주가 오버레이 — 발행일(ISO) 기준 차트 마커 */
   newsMarkers?: Array<{ date: string | null; title: string }>;
+  /** 초기 기간 프리셋 라벨 (예: '1일') — 실시간 탭은 분봉 기본 */
+  initialPeriodLabel?: string;
+  /** 지표 초기 표시 (실시간 탭 기본 세팅용) */
+  initialIndicators?: { vwap?: boolean; rsi?: boolean; macd?: boolean; ma?: boolean };
 }
 
-export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChartProps) {
-  const [period, setPeriod] = useState<Period>(PERIODS[3]); // 기본 3개월
+export function PriceChart({ ticker, market, currency, newsMarkers, initialPeriodLabel, initialIndicators }: PriceChartProps) {
+  const [period, setPeriod] = useState<Period>(
+    () => PERIODS.find((p) => p.label === initialPeriodLabel) ?? PERIODS[3], // 기본 3개월
+  );
   const [candles, setCandles] = useState<Candle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showMa, setShowMa] = useState(false);
-  const [showRsi, setShowRsi] = useState(false);
+  const [showMa, setShowMa] = useState(initialIndicators?.ma ?? false);
+  const [showRsi, setShowRsi] = useState(initialIndicators?.rsi ?? false);
+  const [showVwap, setShowVwap] = useState(initialIndicators?.vwap ?? false);
+  const [showMacd, setShowMacd] = useState(initialIndicators?.macd ?? false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -76,6 +85,8 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
   const volSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const maSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const vwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdSeriesRef = useRef<{ line: ISeriesApi<'Line'>; signal: ISeriesApi<'Line'>; hist: ISeriesApi<'Histogram'> } | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // 차트 1회 생성
@@ -115,12 +126,26 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
     );
     // RSI (pane 1, 초기 숨김)
     const rsiSeries = chart.addSeries(LineSeries, { color: '#8b5cf6', lineWidth: 1, priceLineVisible: false, visible: false }, 1);
+    // VWAP (메인 pane, 초기 숨김) — 레퍼런스 UI의 파란 오버레이
+    const vwapSeries = chart.addSeries(LineSeries, {
+      color: '#2f7de1',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: false,
+    });
+    // MACD (pane 2, 초기 숨김) — 라인 + 시그널 + 히스토그램
+    const macdHist = chart.addSeries(HistogramSeries, { priceFormat: { type: 'price' }, visible: false }, 2);
+    const macdLine = chart.addSeries(LineSeries, { color: '#7a3e12', lineWidth: 1, priceLineVisible: false, visible: false }, 2);
+    const macdSignal = chart.addSeries(LineSeries, { color: '#c2703e', lineWidth: 1, priceLineVisible: false, visible: false }, 2);
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volSeriesRef.current = volSeries;
     maSeriesRef.current = maSeries;
     rsiSeriesRef.current = rsiSeries;
+    vwapSeriesRef.current = vwapSeries;
+    macdSeriesRef.current = { line: macdLine, signal: macdSignal, hist: macdHist };
     markersRef.current = createSeriesMarkers(candleSeries, []);
 
     return () => {
@@ -130,6 +155,8 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
       volSeriesRef.current = null;
       maSeriesRef.current = [];
       rsiSeriesRef.current = null;
+      vwapSeriesRef.current = null;
+      macdSeriesRef.current = null;
       markersRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,6 +221,31 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
     MA_CONFIGS.forEach((cfg, idx) => maSeriesRef.current[idx]?.setData(toLine(sma(closes, cfg.period))));
     rsiSeriesRef.current?.setData(toLine(rsi(closes, 14)));
 
+    // VWAP — KST 날짜 단위 리셋 (분봉에서 인트라데이 VWAP, 일봉 이상에선 봉별 전형가에 수렴 → 참고용)
+    const vwapVals = vwap(
+      candles.map((c) => ({
+        ts: c.ts,
+        h: minorToMajorNumber(c.h, currency),
+        l: minorToMajorNumber(c.l, currency),
+        c: minorToMajorNumber(c.c, currency),
+        volume: c.volume,
+      })),
+      (ts) => dateInTz(ts, KST_TZ),
+    );
+    vwapSeriesRef.current?.setData(toLine(vwapVals));
+
+    // MACD(12,26,9)
+    const m = macd(closes, 12, 26, 9);
+    if (macdSeriesRef.current) {
+      macdSeriesRef.current.line.setData(toLine(m.macd));
+      macdSeriesRef.current.signal.setData(toLine(m.signal));
+      macdSeriesRef.current.hist.setData(
+        m.hist
+          .map((v, i) => (v === null ? null : { time: times[i], value: v, color: v >= 0 ? 'rgba(240,160,32,0.55)' : 'rgba(240,160,32,0.25)' }))
+          .filter((x): x is { time: UTCTimestamp; value: number; color: string } => x !== null),
+      );
+    }
+
     // 뉴스 마커 (F17) — 일/주봉만, 기간 내 뉴스를 가장 가까운 거래일에 표시
     if (markersRef.current) {
       if (period.interval === '1m' || times.length === 0) {
@@ -236,6 +288,15 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
   useEffect(() => {
     rsiSeriesRef.current?.applyOptions({ visible: showRsi });
   }, [showRsi]);
+  useEffect(() => {
+    vwapSeriesRef.current?.applyOptions({ visible: showVwap });
+  }, [showVwap]);
+  useEffect(() => {
+    if (!macdSeriesRef.current) return;
+    macdSeriesRef.current.line.applyOptions({ visible: showMacd });
+    macdSeriesRef.current.signal.applyOptions({ visible: showMacd });
+    macdSeriesRef.current.hist.applyOptions({ visible: showMacd });
+  }, [showMacd]);
 
   return (
     <div className="space-y-3">
@@ -255,8 +316,14 @@ export function PriceChart({ ticker, market, currency, newsMarkers }: PriceChart
         <Button size="sm" variant={showMa ? 'default' : 'ghost'} className="rounded-full" onClick={() => setShowMa((v) => !v)}>
           이평선
         </Button>
+        <Button size="sm" variant={showVwap ? 'default' : 'ghost'} className="rounded-full" onClick={() => setShowVwap((v) => !v)}>
+          VWAP
+        </Button>
         <Button size="sm" variant={showRsi ? 'default' : 'ghost'} className="rounded-full" onClick={() => setShowRsi((v) => !v)}>
           RSI
+        </Button>
+        <Button size="sm" variant={showMacd ? 'default' : 'ghost'} className="rounded-full" onClick={() => setShowMacd((v) => !v)}>
+          MACD
         </Button>
       </div>
       <div className="relative">

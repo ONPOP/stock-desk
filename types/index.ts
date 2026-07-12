@@ -444,3 +444,124 @@ export interface UsageSummary {
   today: UsageRow[];
   month: UsageRow[];
 }
+
+// ───────────────────────── 자동매매 (D15) ─────────────────────────
+
+/**
+ * 전략 파라미터 — VWAP 추세필터 + MACD 트리거 + RSI 가드 + 거래량 검증.
+ * 전부 사용자 조정 가능(설정 UI), 서버에서 zod로 범위 검증 후 저장.
+ */
+export interface StrategyParams {
+  /** 진입: 현재가 > VWAP 연속 유지 봉 수 */
+  vwapHoldBars: number;
+  rsiPeriod: number;
+  /** 진입 허용 RSI 하한(이상) */
+  rsiEntryMin: number;
+  /** 진입 허용 RSI 상한(미만) */
+  rsiEntryMax: number;
+  /** 청산: RSI 과열 기준(이상) */
+  rsiExit: number;
+  macdFast: number;
+  macdSlow: number;
+  macdSignal: number;
+  /** 진입: MACD 히스토그램 음→양 전환이 최근 N봉 이내 (VWAP 유지 봉 수보다 크게) */
+  macdCrossWithinBars: number;
+  /** 거래량 평균 봉 수 */
+  volAvgBars: number;
+  /** 진입: 현재 봉 거래량 > 평균 × 배수 */
+  volMultiplier: number;
+  /** 손절 % (진입가 대비) */
+  stopLossPct: number;
+  /** 익절 % (진입가 대비) */
+  takeProfitPct: number;
+  /** 청산: 종가 VWAP 하향 이탈 연속 봉 수 */
+  vwapExitBars: number;
+  /** 1회 주문 = 시드의 % */
+  orderPct: number;
+  /** 동시 보유 최대 종목 수 */
+  maxPositions: number;
+  /** 당일 실현손실 한도 % (시드 대비) — 도달 시 신규 진입 중지 */
+  dailyLossLimitPct: number;
+  /** 같은 종목 일 최대 진입 횟수 */
+  maxEntriesPerDay: number;
+  /** 손절 후 재진입 금지(분) */
+  reentryCooldownMin: number;
+  /** 전량 청산 시각 (KST HH:mm) — 이후 신규 진입도 금지 */
+  exitTimeKst: string;
+}
+
+/** 자동매매 감시 대상 종목 (국내 한정 — D15) */
+export interface TradingUniverseItem {
+  ticker: string;
+  market: 'KOSPI' | 'KOSDAQ';
+}
+
+export interface AutoTradingConfig {
+  enabled: boolean;
+  /** 수동 비상정지 — enabled와 별개로 최우선 차단 */
+  killSwitch: boolean;
+  params: StrategyParams;
+  universe: TradingUniverseItem[];
+  updatedAt: string | null;
+}
+
+/** 전략 판단·주문 기록 1행 (HOLD는 기록하지 않음) */
+export interface TradeSignalRow {
+  id: string;
+  ticker: string;
+  market: Market;
+  action: 'buy' | 'sell';
+  reason: string;
+  /** 판단 시점 지표 스냅샷 (표시용) */
+  indicators: Record<string, number | null> | null;
+  executed: boolean;
+  rejectReason: string | null;
+  /** 체결가 (최소 단위 정수) */
+  price: number | null;
+  qty: number | null;
+  /** 매도 실현손익 (최소 단위 정수) — 일간 손실 한도 판정에 사용 */
+  pnl: number | null;
+  decidedAt: string;
+}
+
+/** 백테스트 체결 1건 */
+export interface BacktestTrade {
+  entryTs: string;
+  exitTs: string;
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  pnl: number;
+  exitReason: string;
+}
+
+export interface BacktestResult {
+  trades: BacktestTrade[];
+  stats: {
+    tradeCount: number;
+    wins: number;
+    winRate: number;
+    totalPnl: number;
+    /** 최대 낙폭 (에쿼티 기준 최소 단위 정수) */
+    maxDrawdown: number;
+    endingEquity: number;
+    returnPct: number;
+  };
+}
+
+/** 국내 호가 (KIS FHKST01010200) — 가격은 최소 단위 정수 */
+export interface OrderbookLevel {
+  price: number;
+  qty: number;
+}
+
+export interface Orderbook {
+  ticker: string;
+  /** 매도호가 1~10 (1이 최우선 = 가장 낮은 매도가) */
+  asks: OrderbookLevel[];
+  /** 매수호가 1~10 (1이 최우선 = 가장 높은 매수가) */
+  bids: OrderbookLevel[];
+  totalAskQty: number;
+  totalBidQty: number;
+  asOf: string;
+}

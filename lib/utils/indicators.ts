@@ -1,5 +1,5 @@
-// 기술지표 계산 (F14) — 단순이동평균(SMA), RSI(Wilder). 순수 함수.
-// 입력은 표시용 숫자(minorToMajorNumber 변환 후), 출력은 정렬 보존(없는 구간 null).
+// 기술지표 계산 (F14, D15 자동매매) — SMA, EMA, RSI(Wilder), MACD, VWAP. 순수 함수.
+// 입력 스케일 무관(표시용 숫자·최소단위 정수 모두 허용 — 비율/비교 연산만 수행), 출력은 정렬 보존(없는 구간 null).
 
 /** 단순이동평균 — period 미만 구간은 null */
 export function sma(values: number[], period: number): Array<number | null> {
@@ -37,6 +37,88 @@ export function rsi(closes: number[], period = 14): Array<number | null> {
     avgGain = (avgGain * (period - 1) + g) / period;
     avgLoss = (avgLoss * (period - 1) + l) / period;
     out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return out;
+}
+
+/** 지수이동평균 — 시드는 첫 period 구간 SMA, 그 이전은 null */
+export function ema(values: number[], period: number): Array<number | null> {
+  if (period < 1) throw new Error('period는 1 이상이어야 합니다.');
+  const out: Array<number | null> = new Array(values.length).fill(null);
+  if (values.length < period) return out;
+
+  let seed = 0;
+  for (let i = 0; i < period; i++) seed += values[i];
+  let prev = seed / period;
+  out[period - 1] = prev;
+
+  const k = 2 / (period + 1);
+  for (let i = period; i < values.length; i++) {
+    prev = values[i] * k + prev * (1 - k);
+    out[i] = prev;
+  }
+  return out;
+}
+
+export interface MacdSeries {
+  macd: Array<number | null>;
+  signal: Array<number | null>;
+  hist: Array<number | null>;
+}
+
+/** MACD(fast,slow,signal) — macd = EMA(fast)-EMA(slow), signal = macd의 EMA, hist = macd-signal */
+export function macd(closes: number[], fast = 12, slow = 26, signalPeriod = 9): MacdSeries {
+  if (fast >= slow) throw new Error('fast는 slow보다 작아야 합니다.');
+  const emaFast = ema(closes, fast);
+  const emaSlow = ema(closes, slow);
+  const macdLine: Array<number | null> = closes.map((_, i) =>
+    emaFast[i] !== null && emaSlow[i] !== null ? (emaFast[i] as number) - (emaSlow[i] as number) : null,
+  );
+
+  // signal = macd 유효 구간(비-null tail)에 대한 EMA
+  const firstIdx = macdLine.findIndex((v) => v !== null);
+  const signal: Array<number | null> = new Array(closes.length).fill(null);
+  if (firstIdx >= 0) {
+    const tail = macdLine.slice(firstIdx) as number[];
+    const sig = ema(tail, signalPeriod);
+    for (let i = 0; i < sig.length; i++) signal[firstIdx + i] = sig[i];
+  }
+  const hist = macdLine.map((v, i) => (v !== null && signal[i] !== null ? v - (signal[i] as number) : null));
+  return { macd: macdLine, signal, hist };
+}
+
+export interface VwapCandle {
+  ts: string; // UTC ISO
+  h: number;
+  l: number;
+  c: number;
+  volume: number;
+}
+
+/**
+ * VWAP — Σ(전형가격×거래량)/Σ(거래량). dayKeyOf가 주어지면 키가 바뀔 때(=날짜 변경) 누적을 리셋한다.
+ * KIS는 계산된 VWAP을 제공하지 않으므로 분봉으로 직접 산출 (인트라데이 기준).
+ */
+export function vwap(
+  candles: VwapCandle[],
+  dayKeyOf: (ts: string) => string,
+): Array<number | null> {
+  const out: Array<number | null> = new Array(candles.length).fill(null);
+  let pv = 0;
+  let vol = 0;
+  let key = '';
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    const k = dayKeyOf(c.ts);
+    if (k !== key) {
+      key = k;
+      pv = 0;
+      vol = 0;
+    }
+    const typical = (c.h + c.l + c.c) / 3;
+    pv += typical * c.volume;
+    vol += c.volume;
+    out[i] = vol > 0 ? pv / vol : null;
   }
   return out;
 }
