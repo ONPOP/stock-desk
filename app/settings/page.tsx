@@ -8,6 +8,7 @@ import { SettingsForm } from '@/components/settings/settings-form';
 import { UsageCard } from '@/components/settings/usage-card';
 import { Card } from '@/components/ui/card';
 import { LogoutButton } from '@/components/auth/logout-button';
+import { AutoLoginSetting } from '@/components/settings/auto-login-setting';
 
 export default async function SettingsPage() {
   const { supabase, user } = await requireUser();
@@ -32,6 +33,8 @@ export default async function SettingsPage() {
         />
       </Card>
       <SettingsForm initial={view} />
+      <AutoLoginSetting />
+
       <UsageCard usage={usage} />
       <Card className="p-4 text-sm">
         <p className="font-medium">분석 엔진 설정</p>

@@ -1,6 +1,6 @@
 {
   "name": "stock-desk",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -19,6 +19,7 @@
     "sync:corp-codes": "tsx scripts/sync-corp-codes.ts",
     "verify:fundamentals": "tsx scripts/verify-fundamentals.ts",
     "verify:news": "tsx scripts/verify-news.ts",
+    "e2e:auto-login": "tsx scripts/e2e-auto-login.ts",
     "sim:ingest": "tsx scripts/sim-ingest.ts",
     "realtime": "tsx scripts/realtime.ts",
     "build:relay": "node scripts/build-relay.mjs",

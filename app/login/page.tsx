@@ -15,6 +15,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // 기본 꺼짐 — 자동 로그인은 사용자가 명시적으로 켜는 기능이다
+  const [autoLogin, setAutoLogin] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,6 +34,15 @@ export default function LoginPage() {
         );
         return;
       }
+      // 정책 쿠키는 httpOnly라 서버에서만 심을 수 있다.
+      // 체크를 안 했더라도 반드시 호출해야 한다 — 이번 실행분(세션 쿠키)이 없으면
+      // 미들웨어가 바로 다음 요청에서 세션을 끊는다.
+      await fetch('/api/auth/auto-login', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: autoLogin }),
+      });
+
       router.replace('/');
       router.refresh();
     } catch {
@@ -72,6 +83,20 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={autoLogin}
+                onChange={(e) => setAutoLogin(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                자동 로그인 유지
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  다음 실행부터 로그인 화면을 건너뜁니다. 직접 로그아웃할 때까지 유지됩니다.
+                </span>
+              </span>
+            </label>
             {error && <p className="text-sm text-red-500" role="alert">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? '로그인 중…' : '로그인'}
