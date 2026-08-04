@@ -10,6 +10,8 @@ interface JoinedRow {
   auto_analysis: boolean;
   is_favorite: boolean;
   sort_order: number;
+  always_brief: boolean;
+  radar_pin: boolean;
   stocks: {
     ticker: string;
     name_kr: string | null;
@@ -32,6 +34,8 @@ function flatten(row: JoinedRow): WatchlistItem | null {
     auto_analysis: row.auto_analysis,
     isFavorite: row.is_favorite,
     sortOrder: row.sort_order,
+    alwaysBrief: row.always_brief,
+    radarPin: row.radar_pin,
   };
 }
 
@@ -215,7 +219,7 @@ export async function listWatchlist(
   const { data, error } = await db
     .from('watchlist_items')
     .select(
-      'stock_id, group_name, auto_analysis, is_favorite, sort_order, stocks!inner(ticker, name_kr, name_en, market, currency)',
+      'stock_id, group_name, auto_analysis, is_favorite, sort_order, always_brief, radar_pin, stocks!inner(ticker, name_kr, name_en, market, currency)',
     )
     .eq('user_id', userId)
     .eq('watchlist_id', watchlistId)
@@ -229,7 +233,7 @@ export async function listAllWatchlistItems(db: SupabaseClient, userId: string):
   const { data, error } = await db
     .from('watchlist_items')
     .select(
-      'stock_id, group_name, auto_analysis, is_favorite, sort_order, stocks!inner(ticker, name_kr, name_en, market, currency)',
+      'stock_id, group_name, auto_analysis, is_favorite, sort_order, always_brief, radar_pin, stocks!inner(ticker, name_kr, name_en, market, currency)',
     )
     .eq('user_id', userId)
     .order('sort_order', { ascending: true });
@@ -282,6 +286,8 @@ export async function addToWatchlist(
     group_name: '기본',
     auto_analysis: true,
     isFavorite: false,
+    alwaysBrief: false,
+    radarPin: false,
     sortOrder: 0,
   };
 }
@@ -315,6 +321,26 @@ export async function setFavorite(
     .eq('watchlist_id', watchlistId)
     .eq('stock_id', stockId);
   if (error) throw new Error(`즐겨찾기 변경 실패: ${error.message}`);
+}
+
+/**
+ * 분석 엔진 플래그 토글 (D16).
+ * 같은 종목이 여러 탭에 있어도 엔진은 통합 조회하므로, 탭을 가리지 않고 해당 종목 전체 행을 함께 바꾼다
+ * — 탭마다 값이 달라 "왜 안 잡히지"가 생기는 걸 막는다.
+ */
+export async function setEngineFlag(
+  db: SupabaseClient,
+  userId: string,
+  stockId: string,
+  flag: 'always_brief' | 'radar_pin',
+  value: boolean,
+): Promise<void> {
+  const { error } = await db
+    .from('watchlist_items')
+    .update({ [flag]: value })
+    .eq('user_id', userId)
+    .eq('stock_id', stockId);
+  if (error) throw new Error(`분석 설정 변경 실패: ${error.message}`);
 }
 
 /** 같은 묶음 내 드래그 정렬 — stock_id별 sort_order를 일괄 갱신(탭 단위, RLS로 user_id 격리). */

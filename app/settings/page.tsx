@@ -1,5 +1,6 @@
 // S8 설정 — W1 범위: API 키 입력(암호화 저장) + 검증 버튼
 // RSC에서 마스킹된 설정을 조회해 클라이언트 폼에 전달
+import Link from 'next/link';
 import { requireUser } from '@/lib/supabase/server';
 import { getSettingsView } from '@/lib/supabase/queries/settings';
 import { getUsageSummary } from '@/lib/supabase/queries/usage';
@@ -7,6 +8,7 @@ import { SettingsForm } from '@/components/settings/settings-form';
 import { UsageCard } from '@/components/settings/usage-card';
 import { Card } from '@/components/ui/card';
 import { LogoutButton } from '@/components/auth/logout-button';
+import { AutoLoginSetting } from '@/components/settings/auto-login-setting';
 
 export default async function SettingsPage() {
   const { supabase, user } = await requireUser();
@@ -31,7 +33,19 @@ export default async function SettingsPage() {
         />
       </Card>
       <SettingsForm initial={view} />
+      <AutoLoginSetting />
+
       <UsageCard usage={usage} />
+      <Card className="p-4 text-sm">
+        <p className="font-medium">분석 엔진 설정</p>
+        <p className="mt-1 text-muted-foreground">
+          슬롯 시각·종목 선정 규칙·관찰 조건·슬라이드 저장 위치는{' '}
+          <Link href="/reports" className="underline underline-offset-2">
+            분석 리포트 → 설정
+          </Link>{' '}
+          탭에 있습니다.
+        </p>
+      </Card>
     </div>
   );
 }

@@ -60,9 +60,18 @@ export const watchlistReorderSchema = z.object({
     .max(100, '정렬 대상이 너무 많습니다.'),
 });
 
+/** 분석 엔진 플래그 (D16) — 탭과 무관하게 종목 단위로 적용된다 */
+export const watchlistEngineFlagSchema = z.object({
+  action: z.literal('engineFlag'),
+  stock_id: stockIdSchema,
+  flag: z.enum(['always_brief', 'radar_pin']),
+  value: z.boolean(),
+});
+
 export const watchlistPatchSchema = z.discriminatedUnion('action', [
   watchlistFavoriteSchema,
   watchlistReorderSchema,
+  watchlistEngineFlagSchema,
 ]);
 
 // ───────────────────────── 탭 CRUD ─────────────────────────

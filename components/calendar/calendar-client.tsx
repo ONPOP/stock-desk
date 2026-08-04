@@ -330,7 +330,7 @@ export function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent
                   {cell.day}
                 </div>
                 <div className="space-y-1">
-                  {(eventsByDate.get(cell.dateStr) ?? []).slice(0, 3).map((e) => (
+                  {(eventsByDate.get(cell.dateStr) ?? []).map((e) => (
                     <div
                       key={e.id}
                       className={`group flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ${TYPE_COLOR[e.type]} ${

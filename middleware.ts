@@ -1,6 +1,14 @@
 // 세션 갱신 + 인증 게이트 — 미인증 시 /login 리다이렉트 (D1: MVP 단일 계정)
+// 자동 로그인 정책(lib/auth/auto-login.ts)도 여기서 판정한다: 인증 쿠키가 남아 있어도
+// 유지 근거(자동 로그인 ON 또는 현재 실행 중)가 없으면 세션을 끊는다.
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import {
+  AUTO_LOGIN_COOKIE,
+  SESSION_ACTIVE_COOKIE,
+  decideSession,
+  isSupabaseAuthCookie,
+} from '@/lib/auth/auto-login';
 
 const PUBLIC_PATHS = ['/login'];
 
@@ -34,7 +42,27 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
-  if (!user && !isPublic) {
+  const decision = decideSession({
+    hasUser: Boolean(user),
+    autoLogin: request.cookies.get(AUTO_LOGIN_COOKIE)?.value === '1',
+    sessionActive: request.cookies.get(SESSION_ACTIVE_COOKIE)?.value === '1',
+  });
+
+  if (decision === 'sign-out') {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    const cleared = isPublic ? NextResponse.next({ request }) : NextResponse.redirect(loginUrl);
+
+    // 인증 쿠키를 로컬에서 직접 만료시킨다 — auth.signOut()은 네트워크 왕복이 필요해 쓰지 않는다
+    for (const cookie of request.cookies.getAll()) {
+      if (isSupabaseAuthCookie(cookie.name)) cleared.cookies.delete(cookie.name);
+    }
+    cleared.cookies.delete(AUTO_LOGIN_COOKIE);
+    cleared.cookies.delete(SESSION_ACTIVE_COOKIE);
+    return cleared;
+  }
+
+  if (decision === 'unauthenticated' && !isPublic) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     return NextResponse.redirect(loginUrl);

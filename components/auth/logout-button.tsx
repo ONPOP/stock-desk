@@ -15,6 +15,8 @@ export function LogoutButton({ className, label }: { className?: string; label?:
   async function logout() {
     setBusy(true);
     try {
+      // 정책 쿠키(httpOnly)는 서버에서만 지울 수 있다 — 이걸 빠뜨리면 자동 로그인이 계속 켜진 채 남는다
+      await fetch('/api/auth/auto-login', { method: 'DELETE' });
       await createClient().auth.signOut();
       router.replace('/login');
       router.refresh();
