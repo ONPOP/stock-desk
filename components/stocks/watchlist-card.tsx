@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Star, X } from 'lucide-react';
+import { Crosshair, GripVertical, Megaphone, Star, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,8 @@ interface WatchlistCardProps {
   holding: RealHolding | null;
   onRemove: (stockId: string) => void;
   onToggleFavorite: (stockId: string, value: boolean) => void;
+  /** 분석 엔진(D16) 플래그 토글 — 항상 브리핑 / 관찰 고정 */
+  onToggleEngineFlag: (stockId: string, flag: 'always_brief' | 'radar_pin', value: boolean) => void;
   onPrice: (stockId: string, priceMinor: number) => void;
 }
 
@@ -42,7 +44,15 @@ function signed(n: number, currency: WatchlistItem['currency']): string {
   return `${sign}${formatMoney(n, currency)}`;
 }
 
-export function WatchlistCard({ sortId, item, holding, onRemove, onToggleFavorite, onPrice }: WatchlistCardProps) {
+export function WatchlistCard({
+  sortId,
+  item,
+  holding,
+  onRemove,
+  onToggleFavorite,
+  onToggleEngineFlag,
+  onPrice,
+}: WatchlistCardProps) {
   const { quote, error, loading } = useQuote(item.ticker, item.market);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sortId });
 
@@ -67,6 +77,28 @@ export function WatchlistCard({ sortId, item, holding, onRemove, onToggleFavorit
       className="relative gap-0 p-4 ring-border/70 transition-shadow hover:shadow-md"
     >
       <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5">
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          className={item.alwaysBrief ? 'text-emerald-500' : 'text-muted-foreground/50'}
+          aria-label={item.alwaysBrief ? '항상 브리핑 해제' : '항상 브리핑에 포함'}
+          aria-pressed={item.alwaysBrief}
+          title="분석 리포트에 항상 포함"
+          onClick={() => onToggleEngineFlag(item.stock_id, 'always_brief', !item.alwaysBrief)}
+        >
+          <Megaphone className={item.alwaysBrief ? 'fill-current' : ''} />
+        </Button>
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          className={item.radarPin ? 'text-sky-500' : 'text-muted-foreground/50'}
+          aria-label={item.radarPin ? '관찰 고정 해제' : '눌림목 관찰에 고정'}
+          aria-pressed={item.radarPin}
+          title="눌림목 관찰 표에 고정"
+          onClick={() => onToggleEngineFlag(item.stock_id, 'radar_pin', !item.radarPin)}
+        >
+          <Crosshair />
+        </Button>
         <Button
           size="icon-xs"
           variant="ghost"

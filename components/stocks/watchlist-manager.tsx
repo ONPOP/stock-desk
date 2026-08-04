@@ -159,6 +159,44 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
     }
   }
 
+  /** 분석 엔진 플래그 — 탭과 무관하게 종목 단위로 적용되므로 모든 탭의 같은 종목을 함께 갱신한다 */
+  async function handleToggleEngineFlag(
+    stockId: string,
+    flag: 'always_brief' | 'radar_pin',
+    value: boolean,
+  ) {
+    const key = flag === 'always_brief' ? 'alwaysBrief' : 'radarPin';
+    const snapshot = itemsByTab;
+    setItemsByTab((m) =>
+      Object.fromEntries(
+        Object.entries(m).map(([tab, list]) => [
+          tab,
+          list.map((i) => (i.stock_id === stockId ? { ...i, [key]: value } : i)),
+        ]),
+      ),
+    );
+    try {
+      const res = await fetch('/api/watchlist', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'engineFlag', stock_id: stockId, flag, value }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(
+        flag === 'always_brief'
+          ? value
+            ? '항상 브리핑에 포함합니다.'
+            : '항상 브리핑을 해제했습니다.'
+          : value
+            ? '관찰 표에 고정했습니다.'
+            : '관찰 고정을 해제했습니다.',
+      );
+    } catch {
+      setItemsByTab(snapshot);
+      toast.error('분석 설정 변경에 실패했습니다.');
+    }
+  }
+
   async function persistReorder(orderedStockIds: string[]) {
     const targetId = activeId;
     try {
@@ -300,6 +338,7 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
               holding={holdingByStock.get(it.stock_id) ?? null}
               onRemove={handleRemove}
               onToggleFavorite={handleToggleFavorite}
+              onToggleEngineFlag={handleToggleEngineFlag}
               onPrice={handlePrice}
             />
           ))}

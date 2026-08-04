@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   LayoutDashboard, CalendarDays, TrendingUp, Scale, LineChart,
-  NotebookPen, Briefcase, Settings, Activity, type LucideIcon,
+  NotebookPen, Briefcase, Settings, Activity, Images, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LogoutButton } from '@/components/auth/logout-button';
@@ -19,6 +19,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/stocks', label: '내 종목', icon: TrendingUp },
   { href: '/live', label: '실시간', icon: Activity },
   { href: '/performance', label: '기간별 수익률', icon: LineChart },
+  { href: '/reports', label: '분석 리포트', icon: Images },
   { href: '/compare', label: '비교', icon: Scale },
   { href: '/notes', label: '노트', icon: NotebookPen },
   { href: '/paper', label: '모의투자', icon: Briefcase },
@@ -26,7 +27,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 // 모바일 하단 탭은 PRD 7장 고정 5개 (비교·노트·수익률·실시간 제외 — 사이드바에서 접근. 실시간은 PC 중심 D15)
-const HIDDEN_ON_MOBILE = new Set(['/notes', '/compare', '/performance', '/live']);
+const HIDDEN_ON_MOBILE = new Set(['/notes', '/compare', '/performance', '/live', '/reports']);
 const BOTTOM_TABS = NAV_ITEMS.filter((i) => !HIDDEN_ON_MOBILE.has(i.href));
 
 function isActive(pathname: string, href: string): boolean {

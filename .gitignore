@@ -46,3 +46,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .tmp-e2e/
+
+# 분석 엔진 산출물 (D16) — 슬라이드 원본·로그·적재 실패 큐. 저장소에 커밋하지 않는다
+/data/runs
+/data/logs
+/data/fallback

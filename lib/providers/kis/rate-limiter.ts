@@ -50,12 +50,13 @@ export class RateLimiter {
     }
     if (this.queue.length > 0 && !this.timer) {
       const waitMs = Math.max(1, 1000 - (now - this.timestamps[0]));
+      // unref하지 않는다: 이 타이머는 '호출자가 await 중인 실제 대기 작업'이다.
+      // unref하면 다른 핸들이 없는 배치 프로세스(scripts/engine/*)에서 Node가 큐를 버리고
+      // exit 0으로 조용히 종료해 요청이 유실된다. 타이머 수명은 최대 1초라 유지 비용은 없다.
       this.timer = setTimeout(() => {
         this.timer = null;
         this.drain();
       }, waitMs);
-      // Node가 큐 대기만으로 프로세스를 붙잡지 않도록
-      this.timer.unref?.();
     }
   }
 }

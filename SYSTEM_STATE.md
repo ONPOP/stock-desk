@@ -2,39 +2,42 @@
 
 > 다음 세션 시작 시 본 파일을 첨부. 상세 이력은 `task-history.md`, 기준 문서는 `docs/PRD.md`.
 
-## 현재 상태 (2026-06-15)
+## 현재 상태 (2026-08-05, v0.9.0)
 
-- **진행도**: W1~W5(MVP)+V1+V2 완료 + 디자인 재설계(B 트레이더 콕핏) + **실거래 매매일지·포트폴리오 개편 완료**. 검증 전부 통과(tsc·lint·vitest 270/270·build·standalone). 마이그레이션 0005·0006 **적용 완료**. 작업 브랜치 커밋 예정/완료.
-- **앱**: 데스크톱(Electron) `/Applications/Stock Desk.app` 설치됨. dev=`npm run dev`, 데스크톱 실행=`npm run app:build && npm run app:start`, 설치형 빌드=`npm run app:dist`. standalone 재빌드 완료(`scripts/electron-prepare.js`).
-- **마이그레이션**: 0001~0006 **전부 적용 완료**.
+- **진행도**: MVP(W1~W5)+V1+V2 + 자동매매(D15) 완료. 이번 세션에 **정기 배치 분석 엔진(D16) 신규 구축 완료**.
+- **마이그레이션**: 0001~0018 전부 적용 완료.
+- **검증**: tsc · eslint · vitest 561/561 · next build 전부 통과.
+- **자동 실행**: launchd 슬롯 10개 등록됨(`install-schedule --status`로 확인). 중지는 `--remove`.
 
-## 이번 세션 완료분 (실거래 매매일지 + 포트폴리오)
+## 이번 세션 완료분 (분석 엔진 D16)
 
-### 백엔드·API
-- `watchlist.ts`: `is_favorite`/`sort_order` 반영(order by sort_order), `setFavorite`·`reorderWatchlist` 추가
-- `lib/validation/market.ts`: `watchlistPatchSchema`(favorite/reorder discriminated union)
-- `app/api/watchlist/route.ts`: `PATCH`(즐겨찾기·정렬)
-- 매매일지: `real-trades.ts`(CRUD)·`portfolio.ts`(computeHoldings·computeRealized·evalHolding·summarizePortfolio, 평균법·하이브리드 통화)·`app/api/trades`·`lib/validation/trades.ts` — 테스트 12/12 포함 전체 270/270 통과
+### 배치 엔진
+- `lib/engine/` — 지표 확장(MA120/200·이격·기간수익률·국면·MA 터치추적), 스코어러, 관찰 레이더,
+  슬라이드 스키마/HTML/빌더, 저장경로(외장볼륨), KIS 토큰캐시, launchd plist, 채점, 크론 UI 변환
+- `scripts/engine/` — `run-slot.sh`(launchd 진입점) · `run-slot.ts`(오케스트레이터) · pipeline · render-slides(Playwright)
+  · archive · notify(텔레그램) · grade-signals · grade-report · install-schedule · seed-engine
+- `.claude/skills/stock-analysis/SKILL.md` — Claude 헤드리스 분석 계약
 
-### 프론트엔드
-- **내 종목**(`watchlist-manager.tsx`): 즐겨찾기 섹션(중복 표시)→거래소 고정순서(KOSPI→NASDAQ→KOSDAQ→NYSE→AMEX), @dnd-kit 같은 묶음 내 드래그 정렬, 카드 별 토글, 보유 종목 평가손익(`watchlist-card.tsx`), 하단 고정 요약바+recharts 자산배분 도넛(`portfolio-summary-bar.tsx`)
-- **대시보드**(`stat-tiles.tsx`): KOSPI 타일 → 포트폴리오 KPI 타일(`portfolio-kpi-tile.tsx`, 원화환산 평가금액+손익률). `market-kpi-tile.tsx` 제거
-- **기간별 수익률**(`app/performance/page.tsx`·`performance-view.tsx`): 연도/월/기간 토글 + 누적라인·기간별 바·종목별 도넛(recharts). 사이드바 메뉴 추가(`app-shell.tsx`, 모바일 하단탭 제외)
-- 공용 환율 훅 `lib/hooks/use-usd-krw.ts`(시장지수 원/달러)
-- 손익계산기·매매일지 패널(`profit-calculator.tsx`·`holdings-trades-panel.tsx`·`stock-detail.tsx` 개요탭 통합)
+### 앱
+- **`/reports`** 신규 — [아카이브] 슬라이드 이미지 날짜·시간별 열람(라이트박스) / [설정] 슬롯 스케줄·선정 규칙·관찰 규칙·테마·저장/예산
+- `/stocks` 카드에 📢 항상 브리핑 · ⌖ 관찰 고정 토글 추가
+- `/settings`의 엔진 저장 설정은 `/reports` 설정 탭으로 이동(링크만 남김)
+
+### 산출물 형태
+- pptx 파일이 아니라 **슬라이드 PNG**. 자기완결 HTML → Playwright 캡처(1600×900) → 로컬 원본 + Storage 썸네일.
+- 실측: 43종목 수집 ~30초, 슬라이드 13장 렌더, Claude 분석 포함 E2E 정상.
+
+### 수정한 기존 버그
+- `kis/rate-limiter.ts` 타이머 `unref()` → 배치 프로세스에서 대기 요청이 유실되며 exit 0 종료
+- 눌림목 판정이 일중 변동폭만으로 상시 참 → 터치 기준 MA20으로 강화
+- `crypto.ts`를 `crypto-core.ts`로 분리(배치가 server-only를 import할 수 없어서). 웹 경로 가드는 유지
 
 ## 남은 작업
 
-- (선택) 데스크톱 설치형 재배포 시 `npm run app:dist`
-- (선택) Vercel 배포: 사용자 환경변수 등록 후 진행
-- 즐겨찾기/시장 묶음이 단일 `sort_order` 컬럼을 공유 → 한 묶음 정렬이 다른 묶음 상대순서에 영향(허용된 단순화). 분리 필요 시 별도 정렬 컬럼 검토.
-
-## 확정 결정 (이번 세션)
-- 매매일지 = 모의투자(paper_*)와 별개 신규 테이블 `real_trades`. 보유/평단/실현손익은 매매기록 **파생 계산**(단일 진실 원천).
-- 차트 = **recharts**(도넛/바/라인). lightweight-charts는 캔들 전용 유지.
-- 통화 합산 = **하이브리드**(원화 환산 통합 + 통화별 분리). 환율 = 시장지수 원/달러.
-- 기간별 수익률 = **전용 페이지 + 사이드바 메뉴**.
-- 드래그 = **같은 묶음(즐겨찾기/시장) 내 순서만**.
+- **텔레그램**: `.env.local`에 `TELEGRAM_BOT_TOKEN` 추가 필요(현재는 알림만 스킵)
+- **KR 수급(flowKr 15점)**: KIS 투자자별 매매동향 미연동 → 한국 종목은 항상 이 점수를 못 받음
+- **KIS 호출량**: 종목당 800일봉 = 8회 페이지네이션. `price_candles` 증분 캐시로 축소 여지
+- (선택) 데스크톱 재배포 `npm run app:dist`
 
 ## 키 / 데이터 소스
 

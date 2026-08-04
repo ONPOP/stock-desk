@@ -7,6 +7,7 @@ import {
   addToWatchlist,
   removeFromWatchlist,
   setFavorite,
+  setEngineFlag,
   reorderWatchlist,
 } from '@/lib/supabase/queries/watchlist';
 import { watchlistAddSchema, watchlistPatchSchema, watchlistIdSchema } from '@/lib/validation/market';
@@ -62,6 +63,8 @@ export async function PATCH(req: Request) {
     }
     if (parsed.data.action === 'favorite') {
       await setFavorite(supabase, user.id, parsed.data.watchlist_id, parsed.data.stock_id, parsed.data.value);
+    } else if (parsed.data.action === 'engineFlag') {
+      await setEngineFlag(supabase, user.id, parsed.data.stock_id, parsed.data.flag, parsed.data.value);
     } else {
       await reorderWatchlist(
         supabase,

@@ -70,6 +70,10 @@ export interface WatchlistItem {
   auto_analysis: boolean;
   isFavorite: boolean;
   sortOrder: number;
+  /** 분석 엔진(D16): 신호 강도와 무관하게 매 슬롯 분석 대상에 포함 */
+  alwaysBrief: boolean;
+  /** 분석 엔진(D16): 조건과 무관하게 눌림목 관찰 표에 항상 표시 */
+  radarPin: boolean;
 }
 
 /** 시장 위젯(F11) 지수/환율/금리 — 표시값(금액 아님) */
