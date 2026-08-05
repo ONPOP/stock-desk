@@ -4,10 +4,16 @@ import { listWatchlist, listWatchlists } from '@/lib/supabase/queries/watchlist'
 import { listAllTrades } from '@/lib/supabase/queries/real-trades';
 import { WatchlistManager } from '@/components/stocks/watchlist-manager';
 
-export default async function StocksPage() {
+export default async function StocksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ w?: string }>;
+}) {
   const { supabase, user } = await requireUser();
   const tabs = await listWatchlists(supabase, user.id); // 기본 탭 보장 후 반환(맨 앞 고정)
-  const activeId = (tabs.find((t) => t.isDefault) ?? tabs[0]).id;
+  // ?w=<관심목록 id> — 종목 상세에서 뒤로 왔을 때 보던 탭을 복원한다. 없거나 삭제된 id면 기본 탭.
+  const { w } = await searchParams;
+  const activeId = tabs.find((t) => t.id === w)?.id ?? (tabs.find((t) => t.isDefault) ?? tabs[0]).id;
   const [initial, trades] = await Promise.all([
     listWatchlist(supabase, user.id, activeId),
     listAllTrades(supabase, user.id),

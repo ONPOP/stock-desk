@@ -3,7 +3,8 @@
 // 내 종목 관리 (F3 + V2) — 탭(컬렉션)별 종목 관리 + 검색 등록 + 거래소별 그룹 + 즐겨찾기 섹션 + 같은 묶음 내 드래그 정렬.
 // 첫 탭은 기본 탭(삭제·이름변경 불가), 이후 사용자 탭을 만들어 탭별로 종목을 등록/삭제한다.
 // 보유 종목은 카드에 평가손익, 하단 고정 요약바에 포트폴리오 통합(통화 하이브리드) + 자산배분 도넛.
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Star } from 'lucide-react';
 import {
@@ -50,7 +51,12 @@ interface WatchlistManagerProps {
 
 export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId, initial, trades }: WatchlistManagerProps) {
   const [tabs, setTabs] = useState<WatchlistTab[]>(initialTabs);
-  const [activeId, setActiveId] = useState<string>(initialActiveId);
+  // 뒤로가기로 돌아오면 서버 props가 아니라 URL이 진짜 상태다 — 라우터 캐시가 이전 payload를 그대로
+  // 되돌려줘도(=activeId prop이 기본 탭) 주소의 ?w= 를 우선해 보던 탭을 복원한다.
+  const urlTabId = useSearchParams().get('w');
+  const [activeId, setActiveId] = useState<string>(
+    urlTabId && initialTabs.some((t) => t.id === urlTabId) ? urlTabId : initialActiveId,
+  );
   // 탭별 종목 캐시 — 탭 전환 시 재요청 최소화. 기본 탭은 서버에서 받은 initial로 시드.
   const [itemsByTab, setItemsByTab] = useState<Record<string, WatchlistItem[]>>({ [initialActiveId]: initial });
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
@@ -100,9 +106,19 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
     }
   }, []);
 
+  // 활성 탭에 아직 목록이 없으면 불러온다. 탭 클릭뿐 아니라 '뒤로가기로 돌아와 URL이 지정한 탭'도
+  // 여기서 처리된다 — 클릭 경로에만 로딩을 붙이면 복원된 탭이 스켈레톤에서 멈춘다.
+  useEffect(() => {
+    if (!(activeId in itemsByTab)) void ensureItems(activeId);
+  }, [activeId, itemsByTab, ensureItems]);
+
   function selectTab(id: string) {
     setActiveId(id);
-    if (!(id in itemsByTab)) void ensureItems(id);
+    // 주소에 남겨야 종목 상세로 갔다가 뒤로 왔을 때 이 탭으로 복원된다.
+    // router.replace가 아니라 history API를 쓰는 이유: 탭 전환마다 RSC를 다시 받아올 필요가 없다.
+    const url = new URL(window.location.href);
+    url.searchParams.set('w', id);
+    window.history.replaceState(null, '', url);
   }
 
   async function handleAdd(r: StockSearchResult) {
