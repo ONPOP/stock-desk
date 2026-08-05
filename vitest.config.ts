@@ -12,5 +12,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['lib/**/*.test.ts', 'components/**/*.test.ts'],
+    // exFAT 외장 볼륨에서 macOS가 만드는 AppleDouble 부산물(._foo.test.ts)이 테스트로 잡히면 파싱 에러가 난다
+    exclude: ['**/node_modules/**', '**/._*'],
   },
 });
