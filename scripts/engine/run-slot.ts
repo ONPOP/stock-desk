@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { dateInTz, KST_TZ } from '../../lib/utils/date';
+import { dataDir } from '../../lib/engine/data-dir';
 import { resolveTelegramConfig, sendSlotError } from '../../lib/engine/telegram';
 import { adminClient, loadSettings, resolveUserId } from './run-context';
 
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
   const slotType: SlotType = (slot?.slot_type as SlotType) ?? 'quick';
   const market = (slot?.market as 'KR' | 'US' | 'BOTH') ?? 'BOTH';
 
-  await mkdir(path.resolve(process.cwd(), `data/logs/${runDate}`), { recursive: true });
+  await mkdir(path.join(dataDir(), 'logs', runDate), { recursive: true });
   console.log(`■ 슬롯 ${slotId} (${slotType} · ${market}) · ${runDate}`);
 
   const fail = async (step: string, reason: string): Promise<never> => {

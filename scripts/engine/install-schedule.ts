@@ -8,7 +8,7 @@
 import '../_bootstrap';
 
 import { execFile } from 'node:child_process';
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -16,15 +16,20 @@ import {
   isUsDst,
   LABEL_PREFIX,
   labelOf,
+  launcherPath,
   parseCron,
+  renderLauncher,
   renderPlist,
   shiftForStandardTime,
 } from '../../lib/engine/launchd';
+import { dataDir } from '../../lib/engine/data-dir';
 import { adminClient, resolveUserId } from './run-context';
 
 const exec = promisify(execFile);
 const AGENTS_DIR = path.join(homedir(), 'Library', 'LaunchAgents');
 const REPO_ROOT = process.cwd();
+// launchd가 chdir·로그 생성에 쓰는 경로 — 이동식 볼륨이면 잡이 EX_CONFIG로 죽으므로 산출물 루트를 쓴다
+const DATA_DIR = dataDir();
 const PATH_ENV = `/opt/homebrew/bin:/usr/local/bin:${homedir()}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin`;
 
 interface SlotRow {
@@ -113,6 +118,17 @@ async function main(): Promise<void> {
   const enabled = slots.filter((s) => s.enabled);
   const wanted = new Set(enabled.map((s) => s.slot_id));
 
+  // launchd가 실행할 런처는 홈에 둔다 — bash는 이동식 볼륨의 스크립트를 읽지 못한다(exit 126)
+  const launcher = launcherPath(DATA_DIR);
+  if (!dry) {
+    await mkdir(path.dirname(launcher), { recursive: true });
+    await writeFile(launcher, renderLauncher({ repoRoot: REPO_ROOT, dataDir: DATA_DIR, pathEnv: PATH_ENV }), {
+      mode: 0o755,
+    });
+    await chmod(launcher, 0o755);
+    console.log(`런처: ${launcher}`);
+  }
+
   for (const slot of enabled) {
     let spec = parseCron(slot.cron_kst);
     // 설계서 §7의 US cron_kst는 서머타임 기준 — 표준시 기간에는 KST 시각이 1시간 늦어진다
@@ -122,8 +138,9 @@ async function main(): Promise<void> {
       slotId: slot.slot_id,
       spec,
       repoRoot: REPO_ROOT,
-      logPath: path.join(REPO_ROOT, 'data', 'logs', `${slot.slot_id}.launchd.log`),
+      logPath: path.join(DATA_DIR, 'logs', `${slot.slot_id}.launchd.log`),
       pathEnv: PATH_ENV,
+      dataDir: DATA_DIR,
     });
 
     const times = spec.hours
@@ -133,7 +150,7 @@ async function main(): Promise<void> {
     console.log(`${dry ? '· (dry)' : '+'} ${slot.slot_id} [${slot.slot_type}/${slot.market}] ${times} ${days} — ${slot.label}`);
     if (dry) continue;
 
-    await mkdir(path.join(REPO_ROOT, 'data', 'logs'), { recursive: true });
+    await mkdir(path.join(DATA_DIR, 'logs'), { recursive: true });
     await writeFile(plistPath(slot.slot_id), xml);
     // 재등록: 기존 로드를 내리고 다시 올려야 변경된 스케줄이 반영된다
     await launchctl(['bootout', `${domain}/${labelOf(slot.slot_id)}`]);

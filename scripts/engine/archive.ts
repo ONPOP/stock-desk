@@ -9,6 +9,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Slide, StockCard } from '../../lib/engine/slide-schema';
+import { fallbackDir } from '../../lib/engine/fallback-queue';
 import { resolveRunDir, type RunMeta } from './run-context';
 
 const THUMB_BUCKET = 'analysis-slides';
@@ -135,10 +136,10 @@ export async function archiveSlot(
 
 /** DB 적재 실패분 보존 — 다음 실행에서 재시도할 수 있도록 경로만 남긴다 */
 async function queueFallback(dir: string, reason: string): Promise<void> {
-  const fallbackDir = path.resolve(process.cwd(), 'data/fallback');
-  await mkdir(fallbackDir, { recursive: true });
+  const queueDir = fallbackDir();
+  await mkdir(queueDir, { recursive: true });
   const name = `${path.basename(path.dirname(dir))}_${path.basename(dir)}.json`;
-  await writeFile(path.join(fallbackDir, name), JSON.stringify({ dir, reason }, null, 2));
+  await writeFile(path.join(queueDir, name), JSON.stringify({ dir, reason }, null, 2));
 }
 
 async function main(): Promise<void> {

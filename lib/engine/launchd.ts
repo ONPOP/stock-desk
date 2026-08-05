@@ -110,6 +110,13 @@ export interface PlistOptions {
   logPath: string;
   /** launchd는 로그인 셸 PATH를 물려받지 않는다 */
   pathEnv: string;
+  /**
+   * 산출물 루트. launchd의 WorkingDirectory·StandardOutPath로도 쓴다.
+   * repoRoot를 쓰면 안 된다: 코드가 이동식 볼륨에 있으면 launchd가 잡 기동 단계에서
+   * 그 경로로 chdir·로그 파일 생성을 시도하다 TCC에 막혀 EX_CONFIG(78)로 죽는다.
+   * (스크립트가 스스로 repoRoot로 cd 하는 것은 허용된다 — 읽기·실행은 막히지 않는다)
+   */
+  dataDir: string;
 }
 
 export function labelOf(slotId: string): string {
@@ -118,6 +125,44 @@ export function labelOf(slotId: string): string {
 
 function xmlEscape(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** launchd가 실행할 런처의 경로 — 반드시 산출물 루트(홈) 아래에 둔다 */
+export function launcherPath(dataDir: string): string {
+  return `${dataDir}/bin/run-slot-launchd.sh`;
+}
+
+/**
+ * launchd 전용 런처 스크립트. 이 파일이 리포지토리가 아니라 홈에 있어야 하는 이유:
+ * macOS는 이동식 볼륨의 파일 '내용 읽기'를 bash에 허용하지 않는다(EPERM → exit 126).
+ * 반면 node/npx는 같은 파일을 읽고 실행할 수 있으므로, bash는 홈에서 시작해 cd 후 npx에 넘긴다.
+ */
+export function renderLauncher(opts: { repoRoot: string; dataDir: string; pathEnv: string }): string {
+  return `#!/bin/bash
+# 자동 생성 (scripts/engine/install-schedule.ts) — 직접 수정하지 마라. launchd 전용 런처.
+# bash는 이동식 볼륨의 스크립트를 읽지 못하므로 이 파일은 홈에 둔다(node/npx는 읽을 수 있다).
+set -uo pipefail
+
+SLOT_ID="\${1:-}"
+if [ -z "$SLOT_ID" ]; then echo "usage: run-slot-launchd.sh <slot_id>" >&2; exit 2; fi
+
+REPO_ROOT="${opts.repoRoot}"
+export STOCK_DESK_DATA_DIR="${opts.dataDir}"
+export PATH="${opts.pathEnv}"
+
+RUN_DATE="$(TZ=Asia/Seoul date +%F)"
+LOG_DIR="$STOCK_DESK_DATA_DIR/logs/$RUN_DATE"
+mkdir -p "$LOG_DIR"
+
+{
+  echo "===== $(TZ=Asia/Seoul date '+%F %T') KST · slot=$SLOT_ID (launchd) ====="
+  cd "$REPO_ROOT" || { echo "리포지토리로 이동 실패: $REPO_ROOT"; exit 1; }
+  npx tsx scripts/engine/run-slot.ts "$SLOT_ID"
+  echo "===== exit=$? ====="
+} 2>&1 | tee -a "$LOG_DIR/$SLOT_ID.log"
+
+exit "\${PIPESTATUS[0]}"
+`;
 }
 
 export function renderPlist(opts: PlistOptions): string {
@@ -143,13 +188,14 @@ export function renderPlist(opts: PlistOptions): string {
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>${xmlEscape(opts.repoRoot)}/scripts/engine/run-slot.sh</string>
+    <string>${xmlEscape(launcherPath(opts.dataDir))}</string>
     <string>${xmlEscape(opts.slotId)}</string>
   </array>
-  <key>WorkingDirectory</key><string>${xmlEscape(opts.repoRoot)}</string>
+  <key>WorkingDirectory</key><string>${xmlEscape(opts.dataDir)}</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>${xmlEscape(opts.pathEnv)}</string>
+    <key>STOCK_DESK_DATA_DIR</key><string>${xmlEscape(opts.dataDir)}</string>
   </dict>
   <key>StartCalendarInterval</key>
   <array>
