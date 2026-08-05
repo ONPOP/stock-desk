@@ -18,12 +18,14 @@ import { radarCommentTargets, selectRadar, type RadarEntry } from '../../lib/eng
 import { DEFAULT_SIGNAL_RULES } from '../../lib/engine/rules';
 import {
   DEFAULT_ENGINE_SETTINGS,
+  buildSnapshotRows,
   loadActiveRules,
   loadEarningsToday,
   loadEngineSettings,
   loadEngineStocks,
-  upsertSnapshots,
+  upsertSnapshotRows,
 } from '../../lib/engine/repository';
+import { flushSnapshots, queueSnapshots } from '../../lib/engine/fallback-queue';
 import { ensureSlotDir, resolveStorageRoot } from '../../lib/engine/storage-path';
 import { ScriptKisTokenStore } from '../../lib/engine/kis-token-store';
 import { resolveEngineQuoteSource } from '../../lib/engine/quote-source';
@@ -294,6 +296,11 @@ async function runSlot(args: Args): Promise<void> {
   const capturedAt = new Date().toISOString();
   const started = Date.now();
 
+  // 지난 실행에서 DB 장애로 적재하지 못한 스냅샷을 먼저 밀어 넣는다 (실패해도 이번 실행은 계속한다)
+  const recovered = await flushSnapshots((rows) => upsertSnapshotRows(db, rows).then(() => undefined));
+  if (recovered.flushed > 0) console.log(`↻ 대기분 재적재 ${recovered.flushed}건 (${recovered.rows}행)`);
+  if (recovered.failed > 0) console.warn(`⚠ 대기분 ${recovered.failed}건은 여전히 적재하지 못했습니다.`);
+
   const [settings, activeRules, stocks] = await Promise.all([
     loadEngineSettings(db, userId).catch(() => DEFAULT_ENGINE_SETTINGS),
     loadActiveRules(db, userId),
@@ -373,10 +380,31 @@ async function runSlot(args: Args): Promise<void> {
   );
 
   // 스냅샷은 선정 종목만이 아니라 전 종목을 적재한다 — 성적표·룰 튜닝의 모수가 되기 때문
-  const stored = args.dry ? 0 : await upsertSnapshots(db, { userId, slotId: args.slot, runDate, capturedAt }, scored);
+  let stored = 0;
+  let queuedFile: string | null = null;
+  if (!args.dry) {
+    const rows = buildSnapshotRows({ userId, slotId: args.slot, runDate, capturedAt }, scored);
+    try {
+      stored = await upsertSnapshotRows(db, rows);
+    } catch (err) {
+      // DB 일시 장애로 슬롯 전체(분석·렌더·알림)를 죽이지 않는다 — 산출물은 이미 디스크에 있다
+      const reason = err instanceof Error ? err.message : String(err);
+      queuedFile = await queueSnapshots({
+        kind: 'snapshots',
+        userId,
+        slotId: args.slot,
+        runDate,
+        capturedAt,
+        rows,
+        reason,
+      });
+      console.warn(`⚠ 스냅샷 적재 실패 — 다음 실행에서 재시도합니다: ${reason}`);
+    }
+  }
 
   const elapsed = (Date.now() - started) / 1000;
   console.log(`\n✅ ${elapsed.toFixed(1)}초 · 수집 ${scored.length}/${stocks.length} · 선정 ${selected.length} · 적재 ${stored}행`);
+  if (queuedFile) console.log(`   ⏳ 적재 대기 ${scored.length}행 → ${queuedFile}`);
   console.log(`   snapshot.json → ${path.join(dir, 'snapshot.json')}`);
   if (failed.length > 0) console.log(`   ⚠ 미수집 ${failed.length}종목: ${failed.map((f) => f.stock.ticker).join(', ')}`);
   if (radar.length > 0) {

@@ -2,15 +2,15 @@
 // 클라이언트는 파일 경로를 지정할 수 없다: reportId + index로만 접근하고 경로는 DB의 slide_paths에서 온다.
 // (경로 traversal 차단 — resolveStoredFile이 저장 루트 밖 경로를 거부한다)
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { NotFoundError, toErrorResponse, ValidationError } from '@/lib/errors';
 import { requireUser } from '@/lib/supabase/server';
 import { getReport } from '@/lib/supabase/queries/reports';
 import { loadEngineSettings } from '@/lib/engine/repository';
-import { resolveStorageRoot, resolveStoredFile } from '@/lib/engine/storage-path';
+import { defaultStorageDir, resolveStorageRoot, resolveStoredFile } from '@/lib/engine/storage-path';
 
-const DEFAULT_STORAGE_DIR = path.resolve(process.cwd(), 'data/runs');
+// 데스크톱 앱은 읽기 전용 앱 번들 안에서 서버를 띄운다 — cwd 기준 폴백을 그대로 쓰면 안 된다
+const DEFAULT_STORAGE_DIR = defaultStorageDir();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: Request) {

@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { dateInTz, KST_TZ } from '../../lib/utils/date';
-import { resolveStorageRoot, slotRelDir } from '../../lib/engine/storage-path';
+import { defaultStorageDir, resolveStorageRoot, slotRelDir } from '../../lib/engine/storage-path';
 import { loadEngineSettings, DEFAULT_ENGINE_SETTINGS, type EngineSettings } from '../../lib/engine/repository';
 
-export const DEFAULT_STORAGE_DIR = path.resolve(process.cwd(), 'data/runs');
+export const DEFAULT_STORAGE_DIR = defaultStorageDir();
 
 export interface RunMeta {
   userId: string;

@@ -136,15 +136,25 @@ export interface SnapshotUpsertContext {
   capturedAt: string;
 }
 
-/** 스냅샷 적재 — 동일 (유저·날짜·슬롯·종목) 재실행은 덮어쓴다(uniq_snapshot_per_run) */
-export async function upsertSnapshots(
-  db: SupabaseClient,
-  ctx: SnapshotUpsertContext,
-  scored: ScoredStock[],
-): Promise<number> {
-  if (scored.length === 0) return 0;
+export interface SnapshotRow {
+  user_id: string;
+  slot_id: string;
+  run_date: string;
+  stock_id: string;
+  captured_at: string;
+  price_data: unknown;
+  indicators: unknown;
+  flow_data: unknown;
+  score: number;
+  score_detail: unknown;
+}
 
-  const rows = scored.map((s) => ({
+/**
+ * 적재할 행을 만든다 — 적재와 분리해 둔 이유는 실패 시 이 행들을 그대로 대기 큐에 남기기 위함이다
+ * (재시도 때 시세를 다시 조회하거나 지표를 다시 계산하지 않는다).
+ */
+export function buildSnapshotRows(ctx: SnapshotUpsertContext, scored: ScoredStock[]): SnapshotRow[] {
+  return scored.map((s) => ({
     user_id: ctx.userId,
     slot_id: ctx.slotId,
     run_date: ctx.runDate,
@@ -156,10 +166,23 @@ export async function upsertSnapshots(
     score: s.score,
     score_detail: s.detail,
   }));
+}
+
+/** 스냅샷 적재 — 동일 (유저·날짜·슬롯·종목) 재실행은 덮어쓴다(uniq_snapshot_per_run) */
+export async function upsertSnapshotRows(db: SupabaseClient, rows: SnapshotRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
 
   const { error } = await db
     .from('market_snapshots')
     .upsert(rows, { onConflict: 'user_id,run_date,slot_id,stock_id' });
   if (error) throw new Error(`스냅샷 적재 실패: ${error.message}`);
   return rows.length;
+}
+
+export async function upsertSnapshots(
+  db: SupabaseClient,
+  ctx: SnapshotUpsertContext,
+  scored: ScoredStock[],
+): Promise<number> {
+  return upsertSnapshotRows(db, buildSnapshotRows(ctx, scored));
 }
