@@ -28,7 +28,7 @@ chat id가 없어 매 실행마다 건너뛴다("텔레그램 설정이 없어 �
 
 ## 3. 데이터 모델
 
-`supabase/migrations/0018_engine_telegram.sql` — **신규 테이블 하나만 추가**한다.
+`supabase/migrations/0019_engine_telegram.sql` — **신규 테이블 하나만 추가**한다.
 
 `public.engine_telegram`
 
@@ -59,7 +59,7 @@ chat id가 없어 매 실행마다 건너뛴다("텔레그램 설정이 없어 �
 ```ts
 export async function sendMediaGroup(
   cfg: TelegramConfig,
-  photos: Array<{ bytes: Uint8Array; filename: string }>,  // 1~10장
+  photos: Array<{ bytes: Uint8Array; filename: string }>,  // 2~10장 (텔레그램 제약)
   caption?: string,                                         // 첫 장에만 붙는다
 ): Promise<void>;
 
@@ -81,11 +81,15 @@ export interface TelegramSettings {
   botUsername: string | null;
   chatId: string | null;
   enabledSlotIds: string[];
+  lastError: string | null;
 }
 export async function loadTelegramSettings(db: SupabaseClient, userId: string): Promise<TelegramSettings>;
-export async function saveConnection(db, userId, input: { botToken: string; botUsername: string; chatId: string }): Promise<void>;
+// 연결이 2단계(토큰 등록 → chat id 획득)라 저장도 나뉜다
+export async function saveToken(db, userId, botToken: string, botUsername: string): Promise<void>;
+export async function saveChatId(db, userId, chatId: string): Promise<void>;
 export async function setEnabledSlots(db, userId, slotIds: string[]): Promise<void>;
 export async function recordError(db, userId, message: string | null): Promise<void>;
+export async function disconnect(db, userId): Promise<void>;
 ```
 
 ### 4.3 `lib/engine/telegram-dispatch.ts` (신규 — 순수 로직)
@@ -99,7 +103,8 @@ export const MEDIA_GROUP_MAX = 10;
  * sendMediaGroup은 2~10장만 받는다 → 1장짜리 묶음이 생기면 그 건은 'photo'로 표시한다.
  * (13장 = [10, 3], 11장 = [10, 1] → 마지막은 sendPhoto로 보내야 한다)
  */
-export function planSends(slidePaths: string[]): Array<{ kind: 'group' | 'photo'; paths: string[] }>;
+export type SendUnit = { kind: 'group'; paths: string[] } | { kind: 'photo'; paths: [string] };
+export function planSends(slidePaths: string[]): SendUnit[];
 /** 이 슬롯에 보낼지 판정 — 교집합 판정을 한 곳에 둔다 */
 export function shouldNotify(slotId: string, enabledSlotIds: string[]): boolean;
 ```
@@ -174,7 +179,7 @@ chat id 수동 입력은 제공하지 않는다 — 오타로 남의 채팅방�
 ## 8. 영향 범위
 
 - 변경: `scripts/engine/notify.ts`, `lib/engine/telegram.ts`(추가만), `components/settings/engine-storage-settings.tsx`(chat id 입력란 제거)
-- 신규: 마이그레이션 1개, `lib/engine/telegram-settings.ts`, `lib/engine/telegram-dispatch.ts`, API 라우트 2개, 설정 UI 컴포넌트 1개
+- 신규: 마이그레이션 1개(0019), `lib/engine/telegram-settings.ts`, `lib/engine/telegram-dispatch.ts`, API 라우트 2개, 설정 UI 컴포넌트 1개
 - 무변경: 슬롯 실행 흐름(`run-slot.ts`), 스케줄(`install-schedule.ts`), 슬라이드 렌더·적재
 
 ## 9. 스펙 변경 기록
