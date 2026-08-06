@@ -6,6 +6,20 @@
 
 **목표:** 예약 시각에 생성된 슬롯 분석 슬라이드를 텔레그램으로 자동 전송하고, 앱에서 봇을 연결하고 슬롯별로 켜고 끌 수 있게 한다.
 
+## 진행 상태 (2026-08-06 기준)
+
+**Task 1~6 + 7-6~7-8 완료** — 커밋 `acd00f1`~`73d3149`. 코드·마이그레이션·API·UI·문서(D18)가 모두 반영됐고
+`npx tsc --noEmit` · `npm run lint` · `npm test`(647건) 통과를 확인했다.
+
+**남은 것은 7-1~7-5(실물 검증)뿐이고, 사용자 조작이 있어야 시작할 수 있다.** `engine_telegram` 테이블에
+행이 없어 봇이 아직 연결되지 않았다(2026-08-06 확인). @BotFather로 봇을 만들어 앱 [설정] 탭에서 토큰을
+등록하고 텔레그램에서 [시작]을 눌러야 7-2 이후를 진행할 수 있다.
+
+봇 없이 확인 가능한 범위는 이미 검증했다:
+- 미연결 상태에서 `notify.ts` 실행 → `ℹ 텔레그램 설정이 없어 발송을 건너뜁니다` 후 exit 0 (배치가 죽지 않는다)
+- `run-slot.ts` 배선 — 알림은 적재[4] 다음 [5]단계, 실패는 각 단계의 `fail()`이 `sendSlotError`를 직접 호출한다
+- `notify.ts` 분기 — `--error`는 슬롯 on/off 필터보다 먼저 처리되고, 전송 단위 하나가 실패해도 나머지를 계속 보낸다
+
 **설계 근거:** `docs/superpowers/specs/2026-08-06-telegram-slide-delivery-design.md`
 
 **아키텍처:** 전송 경로(`scripts/engine/notify.ts`)는 이미 슬롯의 [5]단계로 돌고 있다. 이번 작업은 (1) 봇 토큰을 신규 테이블에 암호화 저장하는 설정 계층, (2) chat id를 자동 획득하는 연결 API·UI, (3) 슬라이드 전량을 미디어그룹으로 나눠 보내는 전송 로직을 추가한다. 순수 계산(무엇을 몇 장씩 보낼지)은 네트워크·파일시스템을 모르는 모듈로 분리해 단위 테스트한다.
@@ -92,19 +106,19 @@ RLS는 `0017_analysis_engine.sql`의 `engine_settings_own` 정책과 동일한 �
 
 **단계:**
 
-- [ ] **1-1. 마이그레이션 작성** — `0019_engine_telegram.sql`. 주석에 "슬롯 알림용 봇 자격증명(D18). 토큰은 AES-256 암호문만 저장"을 남긴다.
-- [ ] **1-2. 마이그레이션 적용** — `npm run db:migrate`. 적용 후 `psql`/Supabase에서 테이블과 RLS 정책 존재를 확인한다.
-- [ ] **1-3. 실패하는 테스트 작성** — `telegram-settings.test.ts`. Supabase 클라이언트는 최소 스텁(`from().select().eq().maybeSingle()` 체인)을 손으로 만든다. 케이스:
+- [x] **1-1. 마이그레이션 작성** — `0019_engine_telegram.sql`. 주석에 "슬롯 알림용 봇 자격증명(D18). 토큰은 AES-256 암호문만 저장"을 남긴다.
+- [x] **1-2. 마이그레이션 적용** — `npm run db:migrate`. 적용 후 `psql`/Supabase에서 테이블과 RLS 정책 존재를 확인한다.
+- [x] **1-3. 실패하는 테스트 작성** — `telegram-settings.test.ts`. Supabase 클라이언트는 최소 스텁(`from().select().eq().maybeSingle()` 체인)을 손으로 만든다. 케이스:
   - `loadTelegramSettings`: 행 없음 → 전 필드 null/빈 배열
   - 암호문이 저장돼 있으면 복호화된 평문을 반환한다
   - 복호화가 실패해도 예외 없이 `botToken: null`을 반환한다
   - `saveToken`: 전달한 평문이 아니라 **암호문**이 upsert 페이로드에 실린다 (평문 문자열이 페이로드 어디에도 없음을 단언)
   - `setEnabledSlots`: 빈 배열 저장 가능
-- [ ] **1-4. 테스트 실패 확인** — `npx vitest run lib/engine/telegram-settings.test.ts` → 모듈 없음으로 FAIL
-- [ ] **1-5. 구현** — `lib/engine/telegram-settings.ts`
-- [ ] **1-6. 테스트 통과 확인** — 같은 명령 → PASS
-- [ ] **1-7. 변이 테스트** — `saveToken`에서 암호화 호출을 일부러 제거한 사본을 만들어 1-3의 "평문이 페이로드에 없음" 테스트가 **실패하는지** 확인한다. 실패하지 않으면 그 테스트는 아무것도 지키지 못하는 것이므로 다시 쓴다. 확인 후 원복.
-- [ ] **1-8. 커밋** — `feat(engine): 텔레그램 봇 자격증명 저장 계층 (D18)`
+- [x] **1-4. 테스트 실패 확인** — `npx vitest run lib/engine/telegram-settings.test.ts` → 모듈 없음으로 FAIL
+- [x] **1-5. 구현** — `lib/engine/telegram-settings.ts`
+- [x] **1-6. 테스트 통과 확인** — 같은 명령 → PASS
+- [x] **1-7. 변이 테스트** — `saveToken`에서 암호화 호출을 일부러 제거한 사본을 만들어 1-3의 "평문이 페이로드에 없음" 테스트가 **실패하는지** 확인한다. 실패하지 않으면 그 테스트는 아무것도 지키지 못하는 것이므로 다시 쓴다. 확인 후 원복.
+- [x] **1-8. 커밋** — `feat(engine): 텔레그램 봇 자격증명 저장 계층 (D18)`
 
 ---
 
@@ -130,7 +144,7 @@ export function shouldNotify(slotId: string, enabledSlotIds: string[]): boolean;
 
 **단계:**
 
-- [ ] **2-1. 실패하는 테스트 작성** — 경계 케이스를 전부 넣는다.
+- [x] **2-1. 실패하는 테스트 작성** — 경계 케이스를 전부 넣는다.
   - 0장 → 빈 배열
   - 1장 → `[photo]`
   - 2장 → `[group(2)]`
@@ -141,10 +155,10 @@ export function shouldNotify(slotId: string, enabledSlotIds: string[]): boolean;
   - 21장 → `[group(10), group(10), photo]`
   - 모든 케이스에서 원본 순서가 보존되는지 단언
   - `shouldNotify`: 켠 슬롯 true / 끈 슬롯 false / 빈 배열 false / 목록에 없는 슬롯 false
-- [ ] **2-2. 테스트 실패 확인** — `npx vitest run lib/engine/telegram-dispatch.test.ts`
-- [ ] **2-3. 구현** — `lib/engine/telegram-dispatch.ts`
-- [ ] **2-4. 테스트 통과 확인**
-- [ ] **2-5. 커밋** — `feat(engine): 슬라이드 전송 단위 분할 로직`
+- [x] **2-2. 테스트 실패 확인** — `npx vitest run lib/engine/telegram-dispatch.test.ts`
+- [x] **2-3. 구현** — `lib/engine/telegram-dispatch.ts`
+- [x] **2-4. 테스트 통과 확인**
+- [x] **2-5. 커밋** — `feat(engine): 슬라이드 전송 단위 분할 로직`
 
 ---
 
@@ -176,7 +190,7 @@ export async function sendMediaGroup(
 
 **단계:**
 
-- [ ] **3-1. 실패하는 테스트 작성** — `global.fetch`를 vitest `vi.fn()`으로 스텁한다. 케이스:
+- [x] **3-1. 실패하는 테스트 작성** — `global.fetch`를 vitest `vi.fn()`으로 스텁한다. 케이스:
   - `getMe`: 200 + `{ok:true,result:{username:'x_bot'}}` → `{username:'x_bot'}`
   - `getMe`: 401 → `TelegramError`, **메시지에 토큰 문자열이 없다**
   - `findChatId`: 업데이트 있음 → 마지막 메시지의 chat id 문자열 반환
@@ -186,11 +200,11 @@ export async function sendMediaGroup(
   - `sendMediaGroup`: 1장 → 호출 전 거부
   - 429 → `retry_after` 대기 후 재시도해 성공 (타이머는 `vi.useFakeTimers()`)
   - 429 두 번 → 던진다
-- [ ] **3-2. 테스트 실패 확인** — `npx vitest run lib/engine/telegram.test.ts`
-- [ ] **3-3. 구현** — 기존 `call`에 429 재시도를 넣고, 토큰만 받는 호출용 경로를 분리한다
-- [ ] **3-4. 테스트 통과 확인**
-- [ ] **3-5. 회귀 확인** — `npm test` 전체. 기존 `sendSlotError` 경로가 그대로 도는지 본다
-- [ ] **3-6. 커밋** — `feat(engine): 텔레그램 미디어그룹·연결 조회 API`
+- [x] **3-2. 테스트 실패 확인** — `npx vitest run lib/engine/telegram.test.ts`
+- [x] **3-3. 구현** — 기존 `call`에 429 재시도를 넣고, 토큰만 받는 호출용 경로를 분리한다
+- [x] **3-4. 테스트 통과 확인**
+- [x] **3-5. 회귀 확인** — `npm test` 전체. 기존 `sendSlotError` 경로가 그대로 도는지 본다
+- [x] **3-6. 커밋** — `feat(engine): 텔레그램 미디어그룹·연결 조회 API`
 
 ---
 
@@ -214,11 +228,11 @@ export async function sendMediaGroup(
 
 **단계:**
 
-- [ ] **4-1. 기존 동작 확인** — 텔레그램 미설정 상태에서 `npx tsx scripts/engine/notify.ts --slot us_premarket --date 2026-08-06` 실행 → "건너뜁니다" 로그가 나오는지(회귀 기준선)
-- [ ] **4-2. 구현** — 위 순서대로. `resolveTelegramConfig`는 env 우선 규약을 유지하되 DB 설정을 함께 본다
-- [ ] **4-3. 미설정 회귀 확인** — 4-1과 동일한 명령으로 여전히 조용히 종료하는지
-- [ ] **4-4. 슬롯 필터 확인** — 토큰을 넣고 `enabled_slot_ids`가 빈 상태에서 실행 → 아무것도 발송되지 않고 로그만 남는지
-- [ ] **4-5. 커밋** — `feat(engine): 슬롯별 알림 필터 + 슬라이드 전량 전송`
+- [x] **4-1. 기존 동작 확인** — 텔레그램 미설정 상태에서 `npx tsx scripts/engine/notify.ts --slot us_premarket --date 2026-08-06` 실행 → "건너뜁니다" 로그가 나오는지(회귀 기준선)
+- [x] **4-2. 구현** — 위 순서대로. `resolveTelegramConfig`는 env 우선 규약을 유지하되 DB 설정을 함께 본다
+- [x] **4-3. 미설정 회귀 확인** — 4-1과 동일한 명령으로 여전히 조용히 종료하는지
+- [x] **4-4. 슬롯 필터 확인** — 토큰을 넣고 `enabled_slot_ids`가 빈 상태에서 실행 → 아무것도 발송되지 않고 로그만 남는지
+- [x] **4-5. 커밋** — `feat(engine): 슬롯별 알림 필터 + 슬라이드 전량 전송`
 
 ---
 
@@ -247,14 +261,14 @@ export async function sendMediaGroup(
 
 **단계:**
 
-- [ ] **5-1. 구현** — 기존 `app/api/engine/settings/route.ts`의 에러 처리 패턴(`toErrorResponse`, `ValidationError`)을 그대로 따른다
-- [ ] **5-2. 인증 게이트 실증** — dev 서버를 띄우고 **쿠키 없이** 네 엔드포인트를 호출해 전부 막히는지 확인한다. 통과하면 안 된다:
+- [x] **5-1. 구현** — 기존 `app/api/engine/settings/route.ts`의 에러 처리 패턴(`toErrorResponse`, `ValidationError`)을 그대로 따른다
+- [x] **5-2. 인증 게이트 실증** — dev 서버를 띄우고 **쿠키 없이** 네 엔드포인트를 호출해 전부 막히는지 확인한다. 통과하면 안 된다:
   ```
   curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/engine/telegram
   ```
-- [ ] **5-3. 토큰 비노출 실증** — 유효한 세션 쿠키로 POST → GET 순으로 호출하고, 두 응답 본문 어디에도 토큰 문자열이 없음을 확인한다. dev 서버 로그에도 없어야 한다
-- [ ] **5-4. 잘못된 입력 확인** — `enabledSlotIds`에 `../etc` 같은 값을 넣어 400으로 거부되는지
-- [ ] **5-5. 커밋** — `feat(api): 텔레그램 연결·슬롯 토글 라우트`
+- [x] **5-3. 토큰 비노출 실증** — 유효한 세션 쿠키로 POST → GET 순으로 호출하고, 두 응답 본문 어디에도 토큰 문자열이 없음을 확인한다. dev 서버 로그에도 없어야 한다
+- [x] **5-4. 잘못된 입력 확인** — `enabledSlotIds`에 `../etc` 같은 값을 넣어 400으로 거부되는지
+- [x] **5-5. 커밋** — `feat(api): 텔레그램 연결·슬롯 토글 라우트`
 
 ---
 
@@ -278,11 +292,11 @@ export async function sendMediaGroup(
 
 **단계:**
 
-- [ ] **6-1. 구현** — 기존 `engine-storage-settings.tsx`의 폼·토스트 패턴을 따른다
-- [ ] **6-2. chat id 입력란 제거** — `engine-storage-settings.tsx`에서 관련 상태와 PATCH 필드를 걷어낸다. `engine_settings.telegram_chat_id` 컬럼은 남겨 두되 UI에서 노출하지 않는다(기존 테이블 변경 금지)
-- [ ] **6-3. 타입·린트** — `npx tsc --noEmit`, `npm run lint`
-- [ ] **6-4. 실제 브라우저 확인** — dev 서버에서 `/reports` → [설정] 탭. 미연결 화면 → 잘못된 토큰 입력 시 오류 표시 → 유효 토큰 입력 → 안내 노출까지 눈으로 확인
-- [ ] **6-5. 커밋** — `feat(ui): 텔레그램 연결·슬롯 알림 설정`
+- [x] **6-1. 구현** — 기존 `engine-storage-settings.tsx`의 폼·토스트 패턴을 따른다
+- [x] **6-2. chat id 입력란 제거** — `engine-storage-settings.tsx`에서 관련 상태와 PATCH 필드를 걷어낸다. `engine_settings.telegram_chat_id` 컬럼은 남겨 두되 UI에서 노출하지 않는다(기존 테이블 변경 금지)
+- [x] **6-3. 타입·린트** — `npx tsc --noEmit`, `npm run lint`
+- [x] **6-4. 실제 브라우저 확인** — dev 서버에서 `/reports` → [설정] 탭. 미연결 화면 → 잘못된 토큰 입력 시 오류 표시 → 유효 토큰 입력 → 안내 노출까지 눈으로 확인
+- [x] **6-5. 커밋** — `feat(ui): 텔레그램 연결·슬롯 알림 설정`
 
 ---
 
@@ -299,9 +313,9 @@ export async function sendMediaGroup(
 - [ ] **7-3. 수동 전송 실증** — `us_premarket` 슬롯을 켜고 `npx tsx scripts/engine/notify.ts --slot us_premarket --date 2026-08-06` → 텔레그램에 **캡션 붙은 10장 + 3장** 도착 확인. 캡션 내용이 요약과 일치하는지 확인
 - [ ] **7-4. 실패 알림 확인** — 슬롯을 **끈 상태에서** `--error "테스트"` 실행 → 알림이 오는지(끈 슬롯도 실패는 알려야 한다)
 - [ ] **7-5. 예약 경로 실증** — 몇 분 뒤 시각으로 임시 launchd 에이전트를 걸어 자동 발화 → 텔레그램 수신까지 확인 후 에이전트 제거. `kickstart`는 `StartCalendarInterval`을 건너뛰므로 시각 트리거를 따로 확인해야 한다
-- [ ] **7-6. 문서 갱신** — D18 기록. 문구는 설계서 §9 그대로
-- [ ] **7-7. 최종 검증** — `npx tsc --noEmit` · `npm run lint` · `npm test`
-- [ ] **7-8. 커밋** — `docs: D18 텔레그램 알림 결정 기록`
+- [x] **7-6. 문서 갱신** — D18 기록. 문구는 설계서 §9 그대로
+- [x] **7-7. 최종 검증** — `npx tsc --noEmit` · `npm run lint` · `npm test`
+- [x] **7-8. 커밋** — `docs: D18 텔레그램 알림 결정 기록`
 
 ---
 
