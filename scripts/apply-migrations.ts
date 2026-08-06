@@ -23,7 +23,11 @@ async function main() {
     )`;
 
     const dir = path.join(process.cwd(), 'supabase', 'migrations');
-    const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+    // `._*`는 exFAT 볼륨에서 macOS가 만드는 AppleDouble 부산물이다. .sql로 끝나서 필터를 통과하지만
+    // 내용이 바이너리라 서버가 프로토콜 오류(08P01)로 끊는다 — 실제로 0019 적용이 이걸로 실패했다.
+    const files = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql') && !f.startsWith('._'))
+      .sort();
     if (files.length === 0) {
       console.log('적용할 마이그레이션이 없습니다.');
       return;
