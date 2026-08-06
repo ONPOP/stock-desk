@@ -9,7 +9,7 @@ import path from 'node:path';
 import { buildTelegramSummary, type SnapshotSelected } from '../../lib/engine/slide-builder';
 import { parseAnalysisOutput } from '../../lib/engine/slide-schema';
 import {
-  resolveTelegramConfig,
+  CAPTION_LIMIT,
   sendMediaGroup,
   sendMessage,
   sendPhoto,
@@ -17,11 +17,9 @@ import {
   type TelegramConfig,
 } from '../../lib/engine/telegram';
 import { planSends, shouldNotify, type SendUnit } from '../../lib/engine/telegram-dispatch';
-import { loadTelegramSettings, recordError } from '../../lib/engine/telegram-settings';
+import { recordError, resolveTelegramConfigForUser } from '../../lib/engine/telegram-settings';
 import { loadSettings, resolveRunDir } from './run-context';
 
-/** 텔레그램 caption 표시 한도. 넘으면 잘라 caption에 붙이고 전문은 별도 sendMessage로 보낸다 */
-const CAPTION_LIMIT = 1_024;
 /** 같은 챗 초당 1건 레이트리밋 회피용 전송 단위 간 간격 */
 const SEND_INTERVAL_MS = 1_000;
 
@@ -71,11 +69,9 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const { db, meta, dir } = await resolveRunDir(args.slot, args.date);
   const settings = await loadSettings(db, meta.userId);
-  const telegramSettings = await loadTelegramSettings(db, meta.userId);
-  // chat id: 신규 테이블(engine_telegram) 우선, 비어 있을 때만 구 컬럼(engine_settings)으로 폴백.
-  // env(TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID)는 resolveTelegramConfig 내부에서 항상 최우선.
-  const chatId = telegramSettings.chatId ?? settings.telegramChatId;
-  const cfg = resolveTelegramConfig(chatId, telegramSettings.botToken);
+  // run-slot.ts와 동일한 병합 규칙(env > engine_telegram > engine_settings)을 공유 헬퍼로 적용한다.
+  const telegram = await resolveTelegramConfigForUser(db, meta.userId, settings.telegramChatId);
+  const cfg = telegram.config;
 
   if (!cfg) {
     // 토큰 미설정은 오류가 아니다 — 로컬 산출물은 이미 만들어졌고 앱에서 볼 수 있다
@@ -90,7 +86,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!shouldNotify(args.slot, telegramSettings.enabledSlotIds)) {
+  if (!shouldNotify(args.slot, telegram.enabledSlotIds)) {
     console.log(`ℹ 슬롯 ${args.slot}은 텔레그램 알림이 꺼져 있어 발송을 건너뜁니다.`);
     return;
   }

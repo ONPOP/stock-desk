@@ -1,7 +1,7 @@
 // 텔레그램 봇 연결 조회(getMe·findChatId)·미디어그룹 전송 테스트.
 // global.fetch를 스텁해 실제 네트워크 없이 검증한다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { findChatId, getMe, sendMediaGroup, TelegramError, type TelegramConfig } from './telegram';
+import { CAPTION_LIMIT, findChatId, getMe, sendMediaGroup, sendPhoto, TelegramError, type TelegramConfig } from './telegram';
 
 const TOKEN = '123456:AA-secret-token-value';
 const cfg: TelegramConfig = { botToken: TOKEN, chatId: '999' };
@@ -148,6 +148,68 @@ describe('sendMediaGroup', () => {
     const photos = Array.from({ length: 11 }, (_, i) => ({ bytes: new Uint8Array([i]), filename: `${i}.png` }));
     await expect(sendMediaGroup(cfg, photos)).rejects.toThrow(TelegramError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('caption이 1,000~1,024자 구간이면 잘리지 않고 전체가 실린다 (CAPTION_LIMIT과 정합)', async () => {
+    // notify.ts는 CAPTION_LIMIT(1024) 이하면 caption 하나로 충분하다고 판단해 별도 전문 메시지를
+    // 보내지 않는다. sendMediaGroup 내부가 그보다 더 짧게(과거엔 1000자) 잘라버리면 그 구간의
+    // 끝부분이 전문 어디에도 없이 사라진다 — 그 회귀를 막는 테스트.
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const caption = 'A'.repeat(1_010);
+    expect(caption.length).toBeGreaterThan(1_000);
+    expect(caption.length).toBeLessThanOrEqual(CAPTION_LIMIT);
+
+    const photos = [
+      { bytes: new Uint8Array([1]), filename: 'a.png' },
+      { bytes: new Uint8Array([2]), filename: 'b.png' },
+    ];
+    await sendMediaGroup(cfg, photos, caption);
+
+    const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+    const media = JSON.parse(form.get('media') as string) as Array<{ caption?: string }>;
+    expect(media[0].caption).toBe(caption);
+    expect(media[0].caption).toHaveLength(1_010);
+  });
+
+  it('caption이 CAPTION_LIMIT을 넘으면 정확히 그 길이로 자른다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const caption = 'B'.repeat(CAPTION_LIMIT + 50);
+
+    const photos = [
+      { bytes: new Uint8Array([1]), filename: 'a.png' },
+      { bytes: new Uint8Array([2]), filename: 'b.png' },
+    ];
+    await sendMediaGroup(cfg, photos, caption);
+
+    const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+    const media = JSON.parse(form.get('media') as string) as Array<{ caption?: string }>;
+    expect(media[0].caption).toHaveLength(CAPTION_LIMIT);
+  });
+});
+
+describe('sendPhoto', () => {
+  it('caption이 1,000~1,024자 구간이면 잘리지 않는다 (sendMediaGroup과 동일한 한도)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    vi.stubGlobal('fetch', fetchMock);
+    const caption = 'A'.repeat(1_010);
+
+    await sendPhoto(cfg, new Uint8Array([1]), 'a.png', caption);
+
+    const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+    expect(form.get('caption')).toBe(caption);
+  });
+
+  it('caption이 CAPTION_LIMIT을 넘으면 그 길이로 자른다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    vi.stubGlobal('fetch', fetchMock);
+    const caption = 'B'.repeat(CAPTION_LIMIT + 50);
+
+    await sendPhoto(cfg, new Uint8Array([1]), 'a.png', caption);
+
+    const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+    expect((form.get('caption') as string)).toHaveLength(CAPTION_LIMIT);
   });
 });
 

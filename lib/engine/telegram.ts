@@ -4,6 +4,14 @@
 const API_BASE = 'https://api.telegram.org';
 const TIMEOUT_MS = 20_000;
 
+/**
+ * 텔레그램 photo caption 표시 한도(공식 API 한도). sendPhoto·sendMediaGroup의 잘라내기와
+ * notify.ts가 "caption에 다 들어가는지 vs 별도 전문 메시지가 필요한지" 판단하는 기준이
+ * 반드시 같은 값을 봐야 한다 — 둘이 다르면 그 사이 구간에서 caption 끝부분이 전문 어디에도
+ * 없이 조용히 잘려나간다.
+ */
+export const CAPTION_LIMIT = 1_024;
+
 export class TelegramError extends Error {
   constructor(message: string) {
     super(message);
@@ -149,7 +157,7 @@ export async function sendPhoto(
 ): Promise<void> {
   const form = new FormData();
   form.append('chat_id', cfg.chatId);
-  if (caption) form.append('caption', caption.slice(0, 1_000));
+  if (caption) form.append('caption', caption.slice(0, CAPTION_LIMIT));
   form.append('photo', new Blob([new Uint8Array(photo)], { type: 'image/png' }), filename);
   await call(cfg, 'sendPhoto', form);
 }
@@ -171,7 +179,7 @@ export async function sendMediaGroup(
     return {
       type: 'photo' as const,
       media: `attach://${attachName}`,
-      caption: index === 0 && caption ? caption.slice(0, 1_000) : undefined,
+      caption: index === 0 && caption ? caption.slice(0, CAPTION_LIMIT) : undefined,
     };
   });
   form.append('media', JSON.stringify(media));

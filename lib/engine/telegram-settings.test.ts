@@ -1,9 +1,9 @@
 // 텔레그램 봇 자격증명 저장 계층 테스트 (D18) — 암호화 경로가 유일하게 지나가는 지점.
 // Supabase 클라이언트는 실제로 붙이지 않고 체이닝 스텁을 손으로 만든다 (lib/engine/fallback-queue.test.ts 스타일).
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { encryptSecret } from '@/lib/utils/crypto-core';
-import { loadTelegramSettings, saveToken, setEnabledSlots } from './telegram-settings';
+import { loadTelegramSettings, resolveTelegramConfigForUser, saveToken, setEnabledSlots } from './telegram-settings';
 
 process.env.APP_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString('base64');
 
@@ -117,5 +117,114 @@ describe('setEnabledSlots', () => {
 
     expect(calls).toHaveLength(1);
     expect((calls[0].payload as { enabled_slot_ids: string[] }).enabled_slot_ids).toEqual([]);
+  });
+});
+
+/** select().eq().maybeSingle()에서 예외를 던지는 스텁 — DB 접속 실패 등을 흉내낸다 */
+function dbThatThrowsOnSelect(): SupabaseClient {
+  return {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => {
+            throw new Error('연결 끊김(테스트)');
+          },
+        }),
+      }),
+    }),
+  } as unknown as SupabaseClient;
+}
+
+describe('resolveTelegramConfigForUser', () => {
+  const ORIGINAL_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const ORIGINAL_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+  beforeEach(() => {
+    // run-slot.ts·notify.ts가 공유하는 병합 규칙 중 "DB 설정"만 검증한다 —
+    // 환경변수가 항상 최우선이라는 사실은 telegram.ts의 resolveTelegramConfig 테스트가 이미 다룬다.
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    delete process.env.TELEGRAM_CHAT_ID;
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_TOKEN === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = ORIGINAL_TOKEN;
+    if (ORIGINAL_CHAT_ID === undefined) delete process.env.TELEGRAM_CHAT_ID;
+    else process.env.TELEGRAM_CHAT_ID = ORIGINAL_CHAT_ID;
+  });
+
+  it('신규 engine_telegram 값이 있으면 그것을 쓴다(구 chat id는 무시)', async () => {
+    const db = dbWithSelectResult({
+      data: {
+        bot_token_enc: encryptSecret('new-token'),
+        bot_username: '@bot',
+        chat_id: 'new-chat',
+        enabled_slot_ids: ['kr_close_buy'],
+        last_error: null,
+      },
+      error: null,
+    });
+
+    const resolved = await resolveTelegramConfigForUser(db, 'user-1', 'old-chat-from-engine-settings');
+
+    expect(resolved.config).toEqual({ botToken: 'new-token', chatId: 'new-chat' });
+    expect(resolved.enabledSlotIds).toEqual(['kr_close_buy']);
+  });
+
+  it('engine_telegram 행이 없으면 구 engine_settings의 chat id로 폴백하지만 봇 토큰이 없어 config는 null이다', async () => {
+    const db = dbWithSelectResult({ data: null, error: null });
+
+    const resolved = await resolveTelegramConfigForUser(db, 'user-1', 'old-chat-from-engine-settings');
+
+    // 구 경로는 chat id만 있었고 봇 토큰 저장처가 없었다 — 봇 토큰 없이는 발송할 수 없으므로 null이 맞다.
+    expect(resolved.config).toBeNull();
+    expect(resolved.enabledSlotIds).toEqual([]);
+  });
+
+  it('engine_telegram에 토큰만 있고 chat id가 비어 있으면 구 chat id와 합쳐 config를 만든다', async () => {
+    const db = dbWithSelectResult({
+      data: {
+        bot_token_enc: encryptSecret('new-token'),
+        bot_username: '@bot',
+        chat_id: null,
+        enabled_slot_ids: [],
+        last_error: null,
+      },
+      error: null,
+    });
+
+    const resolved = await resolveTelegramConfigForUser(db, 'user-1', 'old-chat-from-engine-settings');
+
+    expect(resolved.config).toEqual({ botToken: 'new-token', chatId: 'old-chat-from-engine-settings' });
+  });
+
+  it('engine_telegram 조회 자체가 실패해도 예외를 던지지 않고 구 설정으로 계속 진행한다', async () => {
+    const db = dbThatThrowsOnSelect();
+
+    const resolved = await resolveTelegramConfigForUser(db, 'user-1', 'old-chat-from-engine-settings');
+
+    // 봇 토큰 소스가 없어 config는 null이지만, 이 호출 자체는 던지지 않아야 한다
+    // (run-slot.ts가 이 호출 실패 때문에 슬롯 전체를 죽이면 안 된다는 요구사항).
+    expect(resolved.config).toBeNull();
+    expect(resolved.enabledSlotIds).toEqual([]);
+  });
+
+  it('환경변수가 있으면 DB 설정보다 우선한다', async () => {
+    process.env.TELEGRAM_BOT_TOKEN = 'env-token';
+    process.env.TELEGRAM_CHAT_ID = 'env-chat';
+    const db = dbWithSelectResult({
+      data: {
+        bot_token_enc: encryptSecret('db-token'),
+        bot_username: '@bot',
+        chat_id: 'db-chat',
+        enabled_slot_ids: [],
+        last_error: null,
+      },
+      error: null,
+    });
+
+    const resolved = await resolveTelegramConfigForUser(db, 'user-1', 'old-chat');
+
+    expect(resolved.config).toEqual({ botToken: 'env-token', chatId: 'env-chat' });
   });
 });

@@ -5,6 +5,7 @@
 // (lib/engine/repository.ts·kis-token-store.ts와 동일한 패턴).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { decryptSecret, encryptSecret } from '@/lib/utils/crypto-core';
+import { resolveTelegramConfig, type TelegramConfig } from '@/lib/engine/telegram';
 
 const TABLE = 'engine_telegram';
 
@@ -112,4 +113,31 @@ export async function recordError(db: SupabaseClient, userId: string, message: s
 export async function disconnect(db: SupabaseClient, userId: string): Promise<void> {
   const { error } = await db.from(TABLE).delete().eq('user_id', userId);
   if (error) throw new Error(`텔레그램 연결 해제 실패: ${error.message}`);
+}
+
+export interface ResolvedTelegram {
+  /** null이면 발송을 건너뛴다(설정 없음 — 오류 아님) */
+  config: TelegramConfig | null;
+  enabledSlotIds: string[];
+}
+
+/**
+ * notify.ts·run-slot.ts가 공유하는 텔레그램 설정 해석의 단일 원천.
+ * 우선순위: 환경변수(resolveTelegramConfig 내부에서 처리) > engine_telegram(신규, 이 함수가 조회) >
+ * engine_settings.telegram_chat_id(구, 호출부가 oldChatId로 넘긴다 — 이 함수는 old 테이블을 직접 읽지 않는다).
+ *
+ * engine_telegram 조회 자체가 실패해도(DB 접속 문제 등) 예외를 던지지 않는다 — 무인 배치의
+ * 실패 알림 경로(run-slot.ts의 sendSlotError)가 이 조회 실패 때문에 막히면 안 된다. 이 경우
+ * env·oldChatId만으로 해석을 계속 시도한다.
+ */
+export async function resolveTelegramConfigForUser(
+  db: SupabaseClient,
+  userId: string,
+  oldChatId: string | null,
+): Promise<ResolvedTelegram> {
+  const settings = await loadTelegramSettings(db, userId).catch(() => null);
+  return {
+    config: resolveTelegramConfig(settings?.chatId ?? oldChatId, settings?.botToken ?? null),
+    enabledSlotIds: settings?.enabledSlotIds ?? [],
+  };
 }
