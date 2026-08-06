@@ -1,6 +1,6 @@
 {
   "name": "stock-desk",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -27,7 +27,7 @@
     "app:build": "next build && node scripts/electron-prepare.js && npm run build:relay",
     "app:start": "electron .",
     "app:dev": "npm run app:build && electron .",
-    "app:dist": "npm run app:build && electron-builder --mac dmg"
+    "app:dist": "npm run app:build && electron-builder --mac dmg -c.directories.output=\"${ELECTRON_OUT_DIR:-$HOME/stock-desk-dist}\""
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.71",

@@ -21,6 +21,8 @@ const eslintConfig = [
       "electron/**",
       "scripts/electron-*.js",
       "next-env.d.ts",
+      // exFAT 외장 볼륨에서 macOS가 만드는 AppleDouble 부산물 — 소스가 아니다
+      "**/._*",
     ],
   },
 ];

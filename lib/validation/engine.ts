@@ -2,6 +2,7 @@
 // 경로 자체의 허용 범위(홈 또는 /Volumes 하위)는 lib/engine/storage-path.ts가 최종 검증한다.
 import { z } from 'zod';
 import { signalRulesSchema } from '@/lib/engine/rules';
+import { SLOT_ID_RE } from '@/lib/engine/storage-path';
 
 export const engineSettingsPatchSchema = z
   .object({
@@ -78,3 +79,29 @@ export const rulesPreviewSchema = z.object({
   rules: signalRulesSchema,
   slotId: z.string().regex(/^[a-z0-9_]{1,40}$/).optional(),
 });
+
+/**
+ * 텔레그램 슬롯 알림 토글 · 연결 해제 (D18).
+ * disconnect는 true만 허용한다 — false를 보내 "연결 안 함" 상태를 표현하는 것은 정의하지 않는다.
+ */
+export const telegramPatchSchema = z
+  .object({
+    enabledSlotIds: z
+      .array(z.string().regex(SLOT_ID_RE, '슬롯 ID 형식이 올바르지 않습니다.'))
+      .max(50)
+      .optional(),
+    disconnect: z.literal(true).optional(),
+  })
+  .strict()
+  .refine((v) => v.enabledSlotIds !== undefined || v.disconnect !== undefined, {
+    message: '변경할 항목이 없습니다.',
+  });
+
+export type TelegramPatch = z.infer<typeof telegramPatchSchema>;
+
+/** 텔레그램 봇 연결(1단계) — 토큰 형식만 거칠게 거르고 실제 유효성은 getMe가 검증한다 */
+export const telegramConnectSchema = z
+  .object({
+    botToken: z.string().trim().min(1, '봇 토큰을 입력하세요.').max(200, '봇 토큰 형식이 올바르지 않습니다.'),
+  })
+  .strict();

@@ -9,6 +9,7 @@ import { constants } from 'node:fs';
 import { access, mkdir, realpath, rm, statfs, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { dataDir, homeDataDir } from './data-dir';
 
 /** DB check 제약(slot_id_safe)과 동일 — 이 값이 그대로 디렉토리명이 된다 */
 export const SLOT_ID_RE = /^[a-z0-9_]{1,40}$/;
@@ -22,6 +23,17 @@ export class StoragePathError extends Error {
     super(message);
     this.name = 'StoragePathError';
   }
+}
+
+/**
+ * 최후 폴백 저장 루트. 보통 `<데이터 루트>/runs`지만, 그 경로가 화이트리스트 밖이면
+ * (데스크톱 앱은 읽기 전용 앱 번들 안에서 standalone 서버를 띄운다) 홈 하위로 대피한다.
+ * 번들 안을 가리키면 preflight가 항상 실패해 슬라이드를 영영 읽지 못한다.
+ */
+export function defaultStorageDir(cwd: string = process.cwd()): string {
+  const local = path.join(dataDir(cwd), 'runs');
+  if (isAllowedRoot(local)) return local;
+  return path.join(homeDataDir(), 'runs');
 }
 
 /** 경로 세그먼트로 쓰이는 값 검증 — traversal(`..`)·구분자 주입 원천 차단 */

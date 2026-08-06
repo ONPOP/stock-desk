@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   assertSafeSegments,
+  defaultStorageDir,
   ensureSlotDir,
   isAllowedRoot,
   normalizeRoot,
@@ -56,6 +57,29 @@ describe('normalizeRoot', () => {
 
   it('빈 문자열은 예외', () => {
     expect(() => normalizeRoot('   ')).toThrow(StoragePathError);
+  });
+});
+
+describe('defaultStorageDir', () => {
+  it('화이트리스트를 통과하는 작업 디렉토리는 <cwd>/data/runs 를 쓴다', () => {
+    const repo = path.join(homedir(), 'dev', 'stock-desk');
+    expect(defaultStorageDir(repo)).toBe(path.join(repo, 'data', 'runs'));
+  });
+
+  it('외장 볼륨의 저장소도 그대로 쓴다', () => {
+    expect(defaultStorageDir('/Volumes/EXT-HDD/stock-desk')).toBe('/Volumes/EXT-HDD/stock-desk/data/runs');
+  });
+
+  // 데스크톱 앱은 읽기 전용 앱 번들 안에서 서버를 띄운다 — 여기로 폴백하면 슬라이드를 영영 못 읽는다
+  it('앱 번들 내부에서는 번들 밖 사용자 경로로 대피한다', () => {
+    const bundle = '/Applications/Stock Desk.app/Contents/Resources/standalone';
+    const resolved = defaultStorageDir(bundle);
+    expect(resolved.startsWith(bundle)).toBe(false);
+    expect(isAllowedRoot(resolved)).toBe(true);
+  });
+
+  it('대피 경로는 홈 디렉토리 하위다', () => {
+    expect(defaultStorageDir('/opt/stock-desk').startsWith(`${homedir()}${path.sep}`)).toBe(true);
   });
 });
 

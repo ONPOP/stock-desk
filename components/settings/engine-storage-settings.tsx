@@ -27,7 +27,6 @@ export function EngineStorageSettings({ initial }: { initial: EngineSettings }) 
   const [retention, setRetention] = useState(String(initial.retentionDays));
   const [maxStocks, setMaxStocks] = useState(String(initial.maxStocksPerSlot));
   const [maxSearches, setMaxSearches] = useState(String(initial.maxSearchesPerStock));
-  const [chatId, setChatId] = useState(initial.telegramChatId ?? '');
   const [volumes, setVolumes] = useState<string[]>([]);
   const [test, setTest] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
@@ -75,7 +74,6 @@ export function EngineStorageSettings({ initial }: { initial: EngineSettings }) 
           retentionDays: Number(retention),
           maxStocksPerSlot: Number(maxStocks),
           maxSearchesPerStock: Number(maxSearches),
-          telegramChatId: chatId.trim() === '' ? null : chatId.trim(),
         }),
       });
       const json = await res.json();
@@ -158,7 +156,7 @@ export function EngineStorageSettings({ initial }: { initial: EngineSettings }) 
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="retention">보관 기간(일)</Label>
           <Input id="retention" type="number" min={0} max={3650} value={retention} onChange={(e) => setRetention(e.target.value)} />
@@ -173,11 +171,6 @@ export function EngineStorageSettings({ initial }: { initial: EngineSettings }) 
           <Label htmlFor="max-searches">종목당 검색</Label>
           <Input id="max-searches" type="number" min={1} max={10} value={maxSearches} onChange={(e) => setMaxSearches(e.target.value)} />
           <p className="text-[11px] text-muted-foreground">사용량 예산</p>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="chat-id">텔레그램 챗ID</Label>
-          <Input id="chat-id" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="선택" spellCheck={false} />
-          <p className="text-[11px] text-muted-foreground">봇 토큰은 .env</p>
         </div>
       </div>
 

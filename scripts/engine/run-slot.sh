@@ -16,7 +16,9 @@ cd "$REPO_ROOT" || exit 1
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.nvm/versions/node/$(ls "$HOME/.nvm/versions/node" 2>/dev/null | tail -1)/bin:$PATH"
 
 RUN_DATE="$(TZ=Asia/Seoul date +%F)"
-LOG_DIR="$REPO_ROOT/data/logs/$RUN_DATE"
+# 산출물 루트는 코드 위치와 분리한다 — macOS는 백그라운드 launchd 잡의 이동식 볼륨 쓰기를 막는다
+DATA_DIR="${STOCK_DESK_DATA_DIR:-$REPO_ROOT/data}"
+LOG_DIR="$DATA_DIR/logs/$RUN_DATE"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$SLOT_ID.log"
 

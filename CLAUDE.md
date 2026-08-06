@@ -34,6 +34,7 @@
 | D9 | 펀더멘털 소스(W3): 미국 재무=Finnhub, 미국 배당=FMP, 미국 공시=SEC EDGAR, 한국=DART(+KIS 시세지표 보강). 공시 AI 1줄 요약은 W3 골격만(실호출 W4) |
 | D10 | 뉴스·AI(W4): 한국 뉴스=네이버, 미국 뉴스=Finnhub. AI(요약·감성·공시요약·브리핑)=OpenAI gpt-4o-mini(Vercel AI SDK). AI 호출은 수동 갱신 트리거, 자동 크론은 골격만(배포 후 등록) |
 | D16 | 정기 배치 분석 엔진: TypeScript(`lib/engine/`·`scripts/engine/`), LLM은 `claude -p` 헤드리스 전용, 실행은 로컬 launchd, 산출물은 pptx가 아닌 슬라이드 PNG(앱 `/reports` 열람), 저장 루트는 외장 볼륨 지정 가능 |
+| D18 | 텔레그램 슬롯 알림: 봇 토큰은 신규 테이블 `engine_telegram`에 AES-256 암호화 저장, chat id는 `getUpdates` 자동 획득(수동 입력 없음), 알림은 슬롯별 on/off + 켜진 슬롯은 슬라이드 전량을 사진 미디어그룹 발송, 실패 알림은 on/off 무관 항상 발송 |
 
 **스펙 변경 규칙**: 개발 중 결정 변경이 발생하면 임의 결정하지 말고 사용자 승인 후 `docs/PRD.md`의 Decision Log에 **D9부터 추가 기록**한다.
 
@@ -77,12 +78,33 @@
 - 종목 단위 플래그: `/stocks` 카드의 📢 항상 브리핑(`always_brief`) · ⌖ 관찰 고정(`radar_pin`) 토글
 - 슬롯 시각 변경 후에는 [스케줄 반영] 버튼(또는 `install-schedule`)을 눌러야 launchd에 반영된다
 - 신호 룰 변경: 편집 후 [새 버전으로 저장] — 기존 행 수정 금지 (성적 비교 위해 이력 보존)
+- 텔레그램 연결: `/reports` → [설정] 탭 → 텔레그램 섹션에서 @BotFather로 받은 토큰을 입력하고, 안내된 봇에게 텔레그램에서 [시작]을 눌러야 연결이 완료된다(chat id 수동 입력 없음)
 
 ### 장애 대응
 - 슬롯 실패 시 텔레그램 에러 알림이 발송된다. 로그: `data/logs/{date}/{slot}.log`
 - Supabase 적재 실패분은 `data/fallback/`에 남고 다음 실행에서 재시도한다.
 - 시세 부분 실패는 정상 동작이다(해당 종목만 "데이터 미수집" 처리).
 - 지정 저장 볼륨이 연결돼 있지 않으면 기본 경로로 저장되고 `storage_state='fallback'`으로 표시된다.
+- 슬라이드 저장 루트는 `SLIDE_STORAGE_ROOT`(.env.local → 패키징 시 `app.env`)로 고정한다. 비워두면
+  배치는 리포지토리, 데스크톱 앱은 앱 번들 안을 가리켜 앱에서 슬라이드를 못 읽는다.
+  단 DB(`engine_settings.slide_storage_root`)가 env보다 우선하므로, 앱 [설정]에서 지정한 값이 최종이다.
+- `npm run app:dist` 산출물은 `$HOME/stock-desk-dist`에 나온다(`ELECTRON_OUT_DIR`로 변경 가능).
+  외장 exFAT 볼륨에 패키징하면 asar 무결성 해싱이 방금 쓴 파일을 되읽다 간헐적으로 깨진다.
+
+### 코드는 외장 볼륨, 산출물은 홈 (macOS TCC)
+
+리포지토리가 `/Volumes/...`에 있으면 백그라운드 launchd 잡은 **볼륨에 쓸 수 없고, bash는 볼륨의
+스크립트를 읽지도 못한다**(EPERM → exit 126). node/npx는 같은 파일을 읽고 실행할 수 있다. 그래서:
+
+- 쓰기 산출물(슬라이드·로그·적재 대기 큐)의 루트는 `STOCK_DESK_DATA_DIR`(기본 `<cwd>/data`)이며,
+  이 환경에서는 `~/StockDesk`로 지정돼 있다. 새 쓰기 경로를 추가할 때 `process.cwd()`를 쓰지 말고
+  `lib/engine/data-dir.ts`의 `dataDir()`을 거쳐라.
+- launchd가 직접 여는 것(`WorkingDirectory`·`StandardOutPath`·실행할 스크립트)은 전부 홈에 둔다.
+  `install-schedule.ts`가 `~/StockDesk/bin/run-slot-launchd.sh` 런처를 생성하고 plist는 그것을 가리킨다.
+  런처가 리포지토리로 `cd` 한 뒤 `npx tsx`로 넘긴다(cd·node 실행은 허용된다).
+- 슬롯이 설정 시각에 안 돌면 먼저 `install-schedule.ts --status`와
+  `launchctl print gui/501/com.stockdesk.slot.<id> | grep 'last exit code'`를 본다.
+  78=EX_CONFIG(launchd가 경로를 못 엶), 126=실행 권한 거부.
 
 ---
 

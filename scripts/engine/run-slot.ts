@@ -10,7 +10,9 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { dateInTz, KST_TZ } from '../../lib/utils/date';
-import { resolveTelegramConfig, sendSlotError } from '../../lib/engine/telegram';
+import { dataDir } from '../../lib/engine/data-dir';
+import { sendSlotError } from '../../lib/engine/telegram';
+import { resolveTelegramConfigForUser } from '../../lib/engine/telegram-settings';
 import { adminClient, loadSettings, resolveUserId } from './run-context';
 
 type SlotType = 'quick' | 'detail' | 'grade' | 'weekly';
@@ -76,7 +78,9 @@ async function main(): Promise<void> {
   const db = adminClient();
   const userId = await resolveUserId(db);
   const settings = await loadSettings(db, userId);
-  const telegram = resolveTelegramConfig(settings.telegramChatId);
+  // notify.ts와 동일한 병합 규칙(env > engine_telegram(신규) > engine_settings(구))을 공유 헬퍼로 적용한다.
+  // engine_telegram 조회가 실패해도 헬퍼 내부에서 흡수하므로, 이 슬롯 자체를 죽이지 않는다.
+  const telegram = (await resolveTelegramConfigForUser(db, userId, settings.telegramChatId)).config;
 
   const { data: slot } = await db
     .from('schedule_slots')
@@ -87,7 +91,7 @@ async function main(): Promise<void> {
   const slotType: SlotType = (slot?.slot_type as SlotType) ?? 'quick';
   const market = (slot?.market as 'KR' | 'US' | 'BOTH') ?? 'BOTH';
 
-  await mkdir(path.resolve(process.cwd(), `data/logs/${runDate}`), { recursive: true });
+  await mkdir(path.join(dataDir(), 'logs', runDate), { recursive: true });
   console.log(`■ 슬롯 ${slotId} (${slotType} · ${market}) · ${runDate}`);
 
   const fail = async (step: string, reason: string): Promise<never> => {
