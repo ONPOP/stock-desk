@@ -8,6 +8,7 @@ import { SlotSchedulePanel } from '@/components/reports/settings/slot-schedule-p
 import { RulesPanel } from '@/components/reports/settings/rules-panel';
 import { ThemesPanel } from '@/components/reports/settings/themes-panel';
 import { EngineStorageSettings } from '@/components/settings/engine-storage-settings';
+import { EngineTelegramSettings } from '@/components/settings/engine-telegram-settings';
 import type { ReportSummary } from '@/lib/supabase/queries/reports';
 import type { RuleVersion, SlotRow, ThemeRow } from '@/lib/supabase/queries/engine-config';
 import type { EngineSettings } from '@/lib/engine/repository';
@@ -44,6 +45,7 @@ export function ReportsTabs(props: Props) {
           <RulesPanel initial={props.ruleVersions} />
           <ThemesPanel initial={props.themes} />
           <EngineStorageSettings initial={props.engineSettings} />
+          <EngineTelegramSettings slots={props.slots} />
         </div>
       </TabsContent>
     </Tabs>
