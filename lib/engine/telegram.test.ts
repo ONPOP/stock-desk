@@ -43,6 +43,27 @@ describe('getMe', () => {
     expect(caught).toBeInstanceOf(TelegramError);
     expect((caught as Error).message).not.toContain(TOKEN);
   });
+
+  it('토큰이 300자 절단 경계에 걸쳐도 조각째 새어나가지 않는다(마스킹 후 자르기)', async () => {
+    // 토큰 시작 위치를 300 이전, 끝 위치를 300 이후에 두어 "먼저 자르고 마스킹" 순서였다면
+    // 토큰 앞부분(예: '123456:AA')만 잘린 채 마스킹을 피해가는 것을 재현한다.
+    const prefix = 'x'.repeat(290); // 290 + TOKEN(28) = 318 > 300, 토큰이 경계를 가로지른다
+    const body = `${prefix}${TOKEN}${'y'.repeat(200)}`;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 401 })));
+
+    let caught: unknown;
+    try {
+      await getMe(TOKEN);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TelegramError);
+    const message = (caught as Error).message;
+    expect(message).not.toContain(TOKEN);
+    // 토큰의 앞부분 조각도 새어나가면 안 된다 (버그: slice(0,300) 후 마스킹하면 이 부분 문자열이 남는다)
+    expect(message).not.toContain(TOKEN.slice(0, 10));
+    expect(message).toContain('***');
+  });
 });
 
 describe('findChatId', () => {

@@ -16,9 +16,16 @@ export interface TelegramConfig {
   chatId: string;
 }
 
-/** 봇 토큰·챗ID는 환경변수(우선) 또는 engine_settings에서. 값은 로그에 남기지 않는다 */
-export function resolveTelegramConfig(chatIdFromSettings: string | null): TelegramConfig | null {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+/**
+ * 봇 토큰·챗ID 해석 우선순위: 환경변수(TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID, 개발·긴급 우회용) 최우선,
+ * 그다음 DB 설정(botTokenFromSettings·chatIdFromSettings — 호출부가 신규/구 테이블 우선순위를 이미 병합해 넘긴다).
+ * 값은 로그에 남기지 않는다.
+ */
+export function resolveTelegramConfig(
+  chatIdFromSettings: string | null,
+  botTokenFromSettings?: string | null,
+): TelegramConfig | null {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN ?? botTokenFromSettings ?? undefined;
   const chatId = process.env.TELEGRAM_CHAT_ID ?? chatIdFromSettings ?? undefined;
   if (!botToken || !chatId) return null;
   return { botToken, chatId };
@@ -64,8 +71,8 @@ async function request(botToken: string, method: string, body: BodyInit, headers
       throw new RetryableError(parseRetryAfterMs(text));
     }
     if (!res.ok) {
-      // 응답 본문에 토큰이 섞이지 않도록 마스킹 후 노출
-      const description = text.slice(0, 300).split(botToken).join('***');
+      // 마스킹 후 자르기: 먼저 자르면 토큰이 300자 경계에 걸쳤을 때 잘린 조각이 그대로 새어나간다
+      const description = text.split(botToken).join('***').slice(0, 300);
       throw new TelegramError(`텔레그램 ${method} 실패 (http ${res.status}): ${description}`);
     }
     if (!text) return undefined;
