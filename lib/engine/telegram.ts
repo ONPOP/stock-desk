@@ -24,29 +24,105 @@ export function resolveTelegramConfig(chatIdFromSettings: string | null): Telegr
   return { botToken, chatId };
 }
 
-async function call(cfg: TelegramConfig, method: string, body: BodyInit, headers?: HeadersInit): Promise<void> {
+/** 429(rate limit) 감지용 내부 신호 — retryAfterMs 대기 후 한 번만 재시도한다 */
+class RetryableError extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super('telegram rate limited');
+  }
+}
+
+function parseRetryAfterMs(bodyText: string): number {
+  try {
+    const parsed = JSON.parse(bodyText) as { parameters?: { retry_after?: number } };
+    const seconds = parsed.parameters?.retry_after;
+    return typeof seconds === 'number' && seconds > 0 ? seconds * 1_000 : 1_000;
+  } catch {
+    return 1_000;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 실제 fetch 1회. 토큰은 URL 조립에만 쓰고, 에러 메시지에는 마스킹해서만 남긴다.
+ * `cfg.botToken`을 참조하지 않는 호출자(getMe·findChatId)도 이 함수를 거치면 동일하게 마스킹된다.
+ */
+async function request(botToken: string, method: string, body: BodyInit, headers?: HeadersInit): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${API_BASE}/bot${cfg.botToken}/${method}`, {
+    const res = await fetch(`${API_BASE}/bot${botToken}/${method}`, {
       method: 'POST',
       body,
       headers,
       signal: controller.signal,
     });
+    const text = await res.text().catch(() => '');
+    if (res.status === 429) {
+      throw new RetryableError(parseRetryAfterMs(text));
+    }
     if (!res.ok) {
-      // 응답 본문에 토큰이 섞이지 않도록 상태코드와 description만 노출
-      const detail = await res.text().catch(() => '');
-      const description = detail.slice(0, 300).replace(cfg.botToken, '***');
+      // 응답 본문에 토큰이 섞이지 않도록 마스킹 후 노출
+      const description = text.slice(0, 300).split(botToken).join('***');
       throw new TelegramError(`텔레그램 ${method} 실패 (http ${res.status}): ${description}`);
     }
+    if (!text) return undefined;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
   } catch (err) {
-    if (err instanceof TelegramError) throw err;
+    if (err instanceof TelegramError || err instanceof RetryableError) throw err;
     const reason = err instanceof Error && err.name === 'AbortError' ? 'timeout' : 'network';
     throw new TelegramError(`텔레그램 ${method} 호출 실패: ${reason}`);
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** 429는 retry_after초 대기 후 한 번만 재시도한다. 두 번째도 429면 던진다 */
+async function callWithRetry(botToken: string, method: string, body: BodyInit, headers?: HeadersInit): Promise<unknown> {
+  try {
+    return await request(botToken, method, body, headers);
+  } catch (err) {
+    if (!(err instanceof RetryableError)) throw err;
+    await sleep(err.retryAfterMs);
+    try {
+      return await request(botToken, method, body, headers);
+    } catch (err2) {
+      if (err2 instanceof RetryableError) {
+        throw new TelegramError(`텔레그램 ${method} 실패: 재시도 후에도 rate limit(429)`);
+      }
+      throw err2;
+    }
+  }
+}
+
+async function call(cfg: TelegramConfig, method: string, body: BodyInit, headers?: HeadersInit): Promise<void> {
+  await callWithRetry(cfg.botToken, method, body, headers);
+}
+
+/** 봇 연결 확인. 토큰만으로 호출하므로 마스킹은 공용 request()가 처리한다 */
+export async function getMe(botToken: string): Promise<{ username: string }> {
+  const json = (await callWithRetry(botToken, 'getMe', JSON.stringify({}), {
+    'Content-Type': 'application/json',
+  })) as { result?: { username?: string } } | undefined;
+  const username = json?.result?.username;
+  if (!username) throw new TelegramError('텔레그램 getMe 응답에 username이 없습니다.');
+  return { username };
+}
+
+/** getUpdates에서 가장 최근 메시지의 chat id. 없으면 null */
+export async function findChatId(botToken: string): Promise<string | null> {
+  const json = (await callWithRetry(botToken, 'getUpdates', JSON.stringify({}), {
+    'Content-Type': 'application/json',
+  })) as { result?: Array<{ message?: { chat?: { id?: number } } }> } | undefined;
+  const updates = json?.result ?? [];
+  const chatId = updates[updates.length - 1]?.message?.chat?.id;
+  return typeof chatId === 'number' ? String(chatId) : null;
 }
 
 export async function sendMessage(cfg: TelegramConfig, text: string): Promise<void> {
@@ -69,6 +145,30 @@ export async function sendPhoto(
   if (caption) form.append('caption', caption.slice(0, 1_000));
   form.append('photo', new Blob([new Uint8Array(photo)], { type: 'image/png' }), filename);
   await call(cfg, 'sendPhoto', form);
+}
+
+/** 슬라이드 여러 장을 한 메시지로 묶어 보낸다. caption은 첫 장에만 붙는다 */
+export async function sendMediaGroup(
+  cfg: TelegramConfig,
+  photos: Array<{ bytes: Uint8Array; filename: string }>,
+  caption?: string,
+): Promise<void> {
+  if (photos.length < 2 || photos.length > 10) {
+    throw new TelegramError(`sendMediaGroup은 2~10장만 지원합니다 (받은 개수: ${photos.length}).`);
+  }
+  const form = new FormData();
+  form.append('chat_id', cfg.chatId);
+  const media = photos.map((photo, index) => {
+    const attachName = `photo${index}`;
+    form.append(attachName, new Blob([new Uint8Array(photo.bytes)], { type: 'image/png' }), photo.filename);
+    return {
+      type: 'photo' as const,
+      media: `attach://${attachName}`,
+      caption: index === 0 && caption ? caption.slice(0, 1_000) : undefined,
+    };
+  });
+  form.append('media', JSON.stringify(media));
+  await call(cfg, 'sendMediaGroup', form);
 }
 
 /** 슬롯 실패 알림 — run_slot.sh의 각 단계가 실패하면 이걸로 알린다 */
