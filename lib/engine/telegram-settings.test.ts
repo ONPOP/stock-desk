@@ -106,6 +106,21 @@ describe('saveToken', () => {
     expect(serialized).not.toContain(plaintext);
     expect(serialized).toContain('bot_token_enc');
   });
+
+  // upsert는 payload에 없는 컬럼을 건드리지 않는다 — chat_id를 생략하면 봇 A→B 교체 시
+  // 봇 A의 chat_id가 그대로 남아 "봇 B 토큰 + 봇 A chat_id"라는 불일치 상태가 된다.
+  // saveToken은 DB의 기존 값을 몰라도 되도록 매번 chat_id·connected_at을 null로 명시해야 한다.
+  it('chat_id·connected_at을 명시적으로 null로 초기화한다 (봇 교체 시나리오)', async () => {
+    const calls: Array<{ table: string; payload: unknown; options: unknown }> = [];
+    const db = dbCapturingUpsert(calls);
+
+    await saveToken(db, 'user-1', 'new-bot-token', '@newbot');
+
+    expect(calls).toHaveLength(1);
+    const payload = calls[0].payload as Record<string, unknown>;
+    expect(payload.chat_id).toBeNull();
+    expect(payload.connected_at).toBeNull();
+  });
 });
 
 describe('setEnabledSlots', () => {

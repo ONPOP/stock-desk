@@ -52,6 +52,13 @@ export async function GET() {
     }
     const { botToken } = settings;
 
+    // 이미 연결 완료된 상태면 텔레그램을 다시 부르지 않는다 — getUpdates가 offset 없이 항상
+    // 같은 /start 메시지를 돌려주므로, 이 가드가 없으면 재폴링·중복 탭마다 saveChatId 재실행 +
+    // "연결 완료" 테스트 메시지가 매번 다시 발송된다.
+    if (settings.chatId) {
+      return NextResponse.json({ chatId: settings.chatId, testMessageError: null });
+    }
+
     // 네트워크 오류·rate limit 등은 "아직 못 찾음"과 동일하게 취급한다 — 클라이언트가 몇 초 뒤 재폴링한다
     const chatId = await findChatId(botToken).catch(() => null);
     if (!chatId) {

@@ -63,7 +63,12 @@ export async function loadTelegramSettings(db: SupabaseClient, userId: string): 
   };
 }
 
-/** 토큰 등록(연결 1단계). chat id·슬롯 설정 등 기존 값은 건드리지 않는다 */
+/**
+ * 토큰 등록(연결 1단계) — chat_id를 명시적으로 null로 되돌린다.
+ * upsert는 payload에 없는 컬럼을 건드리지 않으므로, chat_id를 생략하면 이미 연결된 행에
+ * 다른 봇 토큰을 등록해도 이전 봇의 chat_id가 그대로 남아 "연결됨" 상태가 거짓이 된다
+ * (봇 A의 chat_id + 봇 B의 토큰). 계약("검증 후 chat_id=null로 저장")대로 항상 null로 초기화한다.
+ */
 export async function saveToken(
   db: SupabaseClient,
   userId: string,
@@ -75,6 +80,8 @@ export async function saveToken(
       user_id: userId,
       bot_token_enc: encryptSecret(botToken),
       bot_username: botUsername,
+      chat_id: null,
+      connected_at: null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id' },
