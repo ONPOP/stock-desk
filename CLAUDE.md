@@ -34,6 +34,7 @@
 | D9 | 펀더멘털 소스(W3): 미국 재무=Finnhub, 미국 배당=FMP, 미국 공시=SEC EDGAR, 한국=DART(+KIS 시세지표 보강). 공시 AI 1줄 요약은 W3 골격만(실호출 W4) |
 | D10 | 뉴스·AI(W4): 한국 뉴스=네이버, 미국 뉴스=Finnhub. AI(요약·감성·공시요약·브리핑)=OpenAI gpt-4o-mini(Vercel AI SDK). AI 호출은 수동 갱신 트리거, 자동 크론은 골격만(배포 후 등록) |
 | D16 | 정기 배치 분석 엔진: TypeScript(`lib/engine/`·`scripts/engine/`), LLM은 `claude -p` 헤드리스 전용, 실행은 로컬 launchd, 산출물은 pptx가 아닌 슬라이드 PNG(앱 `/reports` 열람), 저장 루트는 외장 볼륨 지정 가능 |
+| D18 | 텔레그램 슬롯 알림: 봇 토큰은 신규 테이블 `engine_telegram`에 AES-256 암호화 저장, chat id는 `getUpdates` 자동 획득(수동 입력 없음), 알림은 슬롯별 on/off + 켜진 슬롯은 슬라이드 전량을 사진 미디어그룹 발송, 실패 알림은 on/off 무관 항상 발송 |
 
 **스펙 변경 규칙**: 개발 중 결정 변경이 발생하면 임의 결정하지 말고 사용자 승인 후 `docs/PRD.md`의 Decision Log에 **D9부터 추가 기록**한다.
 
@@ -77,6 +78,7 @@
 - 종목 단위 플래그: `/stocks` 카드의 📢 항상 브리핑(`always_brief`) · ⌖ 관찰 고정(`radar_pin`) 토글
 - 슬롯 시각 변경 후에는 [스케줄 반영] 버튼(또는 `install-schedule`)을 눌러야 launchd에 반영된다
 - 신호 룰 변경: 편집 후 [새 버전으로 저장] — 기존 행 수정 금지 (성적 비교 위해 이력 보존)
+- 텔레그램 연결: `/reports` → [설정] 탭 → 텔레그램 섹션에서 @BotFather로 받은 토큰을 입력하고, 안내된 봇에게 텔레그램에서 [시작]을 눌러야 연결이 완료된다(chat id 수동 입력 없음)
 
 ### 장애 대응
 - 슬롯 실패 시 텔레그램 에러 알림이 발송된다. 로그: `data/logs/{date}/{slot}.log`
