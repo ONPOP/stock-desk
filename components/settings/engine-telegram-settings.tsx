@@ -11,7 +11,6 @@
 // 연결 직후 1회성 안내에만 쓰고 이후 상태 표시 근거로 삼지 않는다.
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, Send, Unlink } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,8 +37,10 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
+// 서버 오류 응답 형태 — lib/errors.ts의 toErrorResponse가 { error: string }으로 내려준다.
+// 이 컴포넌트 안에서만 이 필드명을 쓴다(코드베이스 전역 관례는 건드리지 않는다).
 interface ApiErrorBody {
-  message?: string;
+  error?: string;
 }
 
 interface ConnectPostBody extends ApiErrorBody {
@@ -53,6 +54,10 @@ interface ConnectGetBody extends ApiErrorBody {
 
 export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
+  /** 상태 조회 자체(GET /api/engine/telegram)의 HTTP·네트워크 오류 — status와 별개로 재시도 가능하게 둔다 */
+  const [statusError, setStatusError] = useState<string | null>(null);
+  /** 연결·해제·슬롯 저장 결과 안내 — 인접 패널(engine-storage-settings 등)과 동일하게 인라인 컬러 텍스트로 표시한다 */
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
   // 연결 폼
   const [token, setToken] = useState('');
@@ -83,16 +88,22 @@ export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
   }, []);
 
   const refreshStatus = async () => {
+    if (mountedRef.current) setStatusError(null);
     try {
       const res = await fetch('/api/engine/telegram');
-      const json = (await readJson(res)) as TelegramStatus;
-      if (!res.ok || !mountedRef.current) return;
+      const json = (await readJson(res)) as TelegramStatus & ApiErrorBody;
+      if (!mountedRef.current) return;
+      if (!res.ok) {
+        // HTTP 오류(세션 만료·DB 오류 등)도 네트워크 예외와 동일하게 재시도 가능한 상태로 남긴다 —
+        // status는 null로 유지해 "확인 중" 스피너 대신 오류 배너 + [다시 시도]가 뜨게 한다
+        setStatusError(json.error ?? '연결 상태를 불러오지 못했습니다.');
+        return;
+      }
       setStatus(json);
       setSelectedSlotIds(new Set(json.enabledSlotIds ?? []));
       setSlotsDirty(false);
     } catch {
-      // 초기 조회 실패는 미연결 취급 — 사용자가 다시 시도할 수 있게 폼을 보여준다
-      if (mountedRef.current) setStatus({ connected: false, botUsername: null, chatId: null, enabledSlotIds: [], lastError: null });
+      if (mountedRef.current) setStatusError('연결 상태를 불러오지 못했습니다. 네트워크 상태를 확인해주세요.');
     }
   };
 
@@ -116,9 +127,9 @@ export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
         if (cancelled) return;
         if (res.ok && json.chatId) {
           if (json.testMessageError) {
-            toast.warning(`연결은 됐지만 테스트 메시지 발송에 실패했습니다: ${json.testMessageError}`);
+            setMessage({ tone: 'error', text: `연결은 됐지만 테스트 메시지 발송에 실패했습니다: ${json.testMessageError}` });
           } else {
-            toast.success('텔레그램 연결이 완료됐습니다.');
+            setMessage({ tone: 'ok', text: '텔레그램 연결이 완료됐습니다.' });
           }
           setAwaitingChat(false);
           setPendingBotUsername(null);
@@ -161,7 +172,7 @@ export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
         body: JSON.stringify({ botToken }),
       });
       const json = (await readJson(res)) as ConnectPostBody;
-      if (!res.ok) throw new Error(json.message ?? '텔레그램 봇 토큰이 올바르지 않습니다. 토큰을 다시 확인해주세요.');
+      if (!res.ok) throw new Error(json.error ?? '텔레그램 봇 토큰이 올바르지 않습니다. 토큰을 다시 확인해주세요.');
       setPendingBotUsername(json.botUsername ?? null);
       setPollTimedOut(false);
       setAwaitingChat(true);
@@ -186,14 +197,14 @@ export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
         body: JSON.stringify({ disconnect: true }),
       });
       const json = (await readJson(res)) as TelegramStatus & ApiErrorBody;
-      if (!res.ok) throw new Error(json.message ?? '연결 해제에 실패했습니다.');
+      if (!res.ok) throw new Error(json.error ?? '연결 해제에 실패했습니다.');
       setStatus(json);
       setSelectedSlotIds(new Set());
       setSlotsDirty(false);
       setConfirmingDisconnect(false);
-      toast.success('텔레그램 연결을 해제했습니다.');
+      setMessage({ tone: 'ok', text: '텔레그램 연결을 해제했습니다.' });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '연결 해제에 실패했습니다.');
+      setMessage({ tone: 'error', text: e instanceof Error ? e.message : '연결 해제에 실패했습니다.' });
     } finally {
       setDisconnecting(false);
     }
@@ -218,13 +229,13 @@ export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
         body: JSON.stringify({ enabledSlotIds: [...selectedSlotIds] }),
       });
       const json = (await readJson(res)) as TelegramStatus & ApiErrorBody;
-      if (!res.ok) throw new Error(json.message ?? '저장에 실패했습니다.');
+      if (!res.ok) throw new Error(json.error ?? '저장에 실패했습니다.');
       setStatus(json);
       setSelectedSlotIds(new Set(json.enabledSlotIds ?? []));
       setSlotsDirty(false);
-      toast.success('슬롯 알림 설정을 저장했습니다.');
+      setMessage({ tone: 'ok', text: '슬롯 알림 설정을 저장했습니다.' });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '저장에 실패했습니다.');
+      setMessage({ tone: 'error', text: e instanceof Error ? e.message : '저장에 실패했습니다.' });
     } finally {
       setSavingSlots(false);
     }
@@ -241,7 +252,22 @@ export function EngineTelegramSettings({ slots }: { slots: SlotRow[] }) {
         </p>
       </div>
 
-      {status === null && (
+      {message && (
+        <p className={`text-sm ${message.tone === 'ok' ? 'text-emerald-600' : 'text-destructive'}`}>
+          {message.text}
+        </p>
+      )}
+
+      {statusError && (
+        <div className="space-y-2 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
+          <p>{statusError}</p>
+          <Button size="sm" variant="outline" onClick={() => void refreshStatus()}>
+            다시 시도
+          </Button>
+        </div>
+      )}
+
+      {status === null && !statusError && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> 연결 상태 확인 중…
         </div>
