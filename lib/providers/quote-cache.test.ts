@@ -50,7 +50,7 @@ describe('getCachedQuote', () => {
 
     await expect(getCachedQuote(source, 'AAPL', 'NASDAQ')).resolves.toBe(QUOTE);
 
-    vi.setSystemTime(new Date('2026-01-01T00:00:07.000Z'));
+    vi.setSystemTime(new Date('2026-01-01T00:00:11.000Z')); // TTL_MS(10_000)을 넘겨 fresh 캐시를 지나가게 한다
     getQuote.mockRejectedValueOnce(new Error('temporary outage'));
 
     await expect(getCachedQuote(source, 'AAPL', 'NASDAQ')).resolves.toBe(QUOTE);

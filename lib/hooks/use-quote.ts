@@ -1,77 +1,72 @@
 'use client';
 
-// 시세 폴링 훅 (PRD D3: MVP REST 폴링 5~10초). 탭이 숨겨지면 폴링을 멈춰 불필요한 호출을 줄인다.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// 시세 폴링 훅 (PRD D3: MVP REST 폴링 5~10초).
+// 실제 폴링(타이머·요청 중복 제거·탭 가시성 대응)은 use-quote-store.ts가 담당한다.
+// 이 훅은 그 스토어의 얇은 구독자일 뿐이다 — 여기서 setInterval이나 AbortController를 새로 두지 않는다.
+import { useCallback, useEffect, useState } from 'react';
 import type { Market, Quote } from '@/types';
+import { peekQuote, refetchQuote, subscribeQuote, type QuoteSnapshot } from './use-quote-store';
 
-interface UseQuoteOptions {
+export interface UseQuoteOptions {
   intervalMs?: number;
   enabled?: boolean;
 }
 
-interface UseQuoteResult {
+export interface UseQuoteResult {
   quote: Quote | null;
   source: string | null;
   error: string | null;
   loading: boolean;
+  /**
+   * `enabled: false`인데 스토어의 마지막 값을 대신 보여주고 있는가.
+   * 화면 밖으로 나간 타일이 값은 유지하되 갱신은 멈춘 상태를 뜻한다.
+   * `enabled: true`면 값이 아무리 오래됐어도 false다(갱신은 돌고 있으므로).
+   */
+  stale: boolean;
   refetch: () => void;
+}
+
+/** enabled: false일 때 보여줄 스냅샷 — 스토어에 남은 값을 그대로 쓰되 loading은 항상 false로 고정한다 */
+function disabledSnapshot(ticker: string, market: Market): QuoteSnapshot {
+  const peeked = peekQuote(ticker, market);
+  return {
+    quote: peeked?.quote ?? null,
+    source: peeked?.source ?? null,
+    error: peeked?.error ?? null,
+    at: peeked?.at ?? null,
+    loading: false,
+  };
+}
+
+function initialSnapshot(ticker: string, market: Market, enabled: boolean): QuoteSnapshot {
+  if (!enabled) return disabledSnapshot(ticker, market);
+  return peekQuote(ticker, market) ?? { quote: null, source: null, error: null, at: null, loading: true };
 }
 
 export function useQuote(ticker: string, market: Market, opts: UseQuoteOptions = {}): UseQuoteResult {
   const { intervalMs = 7000, enabled = true } = opts;
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [source, setSource] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const abortRef = useRef<AbortController | null>(null);
 
-  const fetchQuote = useCallback(async () => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const res = await fetch(
-        `/api/quote?ticker=${encodeURIComponent(ticker)}&market=${encodeURIComponent(market)}`,
-        { signal: controller.signal },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? '시세를 불러오지 못했습니다.');
-      setQuote(data.quote);
-      setSource(data.source);
-      setError(null);
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [ticker, market]);
+  const [snapshot, setSnapshot] = useState<QuoteSnapshot>(() => initialSnapshot(ticker, market, enabled));
 
   useEffect(() => {
-    if (!enabled) return;
-    let timer: ReturnType<typeof setInterval> | null = null;
+    if (!enabled) {
+      // 구독하지 않는다 — 스토어에 남은 마지막 값만 한 번 읽어 보여준다
+      setSnapshot(disabledSnapshot(ticker, market));
+      return;
+    }
+    return subscribeQuote(ticker, market, { intervalMs }, setSnapshot);
+  }, [ticker, market, intervalMs, enabled]);
 
-    const start = () => {
-      if (timer) return;
-      fetchQuote();
-      timer = setInterval(fetchQuote, intervalMs);
-    };
-    const stop = () => {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-    };
-    const onVisibility = () => (document.hidden ? stop() : start());
+  const refetch = useCallback(() => {
+    refetchQuote(ticker, market);
+  }, [ticker, market]);
 
-    start();
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener('visibilitychange', onVisibility);
-      abortRef.current?.abort();
-    };
-  }, [enabled, intervalMs, fetchQuote]);
-
-  return { quote, source, error, loading, refetch: fetchQuote };
+  return {
+    quote: snapshot.quote,
+    source: snapshot.source,
+    error: snapshot.error,
+    loading: snapshot.loading,
+    stale: !enabled && snapshot.at !== null,
+    refetch,
+  };
 }

@@ -4,7 +4,10 @@ import 'server-only';
 import type { Market, Quote } from '@/types';
 import type { QuoteSource } from '@/lib/providers/quote-source';
 
-const TTL_MS = 6_000;
+// 폴링 기본 간격(use-quote.ts의 7000ms)보다 길어야 한다.
+// 짧으면 매 폴링이 만료 직후에 도착해 캐시가 100% 빗나간다.
+// 시세가 최대 10초 지날 수 있다는 대가는 승인됨(2026-08-07).
+const TTL_MS = 10_000;
 const STALE_MAX_MS = 5 * 60_000; // 5분 넘은 값은 stale로도 쓰지 않음
 
 interface Entry {
