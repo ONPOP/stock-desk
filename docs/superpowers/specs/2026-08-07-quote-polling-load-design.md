@@ -54,6 +54,8 @@ export interface QuoteSnapshot {
   error: string | null;
   /** 마지막 수신 시각(ms). null이면 아직 한 번도 못 받았다 */
   at: number | null;
+  /** 값이 한 번도 없었고 요청이 진행 중인가 */
+  loading: boolean;
 }
 
 export interface SubscribeOptions {
@@ -70,6 +72,12 @@ export function subscribeQuote(
 
 /** 구독과 무관하게 한 번 강제 갱신 */
 export function refetchQuote(ticker: string, market: Market): void;
+
+/**
+ * 구독하지 않고 스냅샷만 읽는다. `useQuote`가 `enabled: false`일 때
+ * 마지막 값을 그대로 보여주기 위해 필요하다(폴링은 켜지 않는다).
+ */
+export function peekQuote(ticker: string, market: Market): QuoteSnapshot | null;
 
 /** 테스트 전용 — 스토어 전체 비우기 */
 export function __resetQuoteStore(): void;
