@@ -32,6 +32,17 @@ function installFetch(impl: FetchImpl) {
   return fn;
 }
 
+const QUOTE2: Quote = { ...QUOTE, price: 71000, change: 1500 };
+
+/** 수동으로 resolve/reject 하는 deferred */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 let originalFetch: unknown;
 
 beforeEach(() => {
@@ -181,5 +192,85 @@ describe('useQuote', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('enabled: false여도 refetch()는 결과를 반영하지만 폴링은 시작하지 않는다', async () => {
+    const fetchMock = installFetch(okFetch());
+
+    const { result } = renderHook(() => useQuote('005930', 'KOSPI', { enabled: false }));
+    expect(result.current.quote).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.refetch();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.quote).toEqual(QUOTE);
+    expect(result.current.stale).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // refetch() 한 번이 폴링을 시작시켰다면 안 된다 — 시간이 흘러도 재요청이 없어야 한다
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7000 * 3);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('비활성 refetch() 진행 중 ticker가 바뀌면 응답이 와도 이전 종목 값을 반영하지 않는다', async () => {
+    const d = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
+    const fetchMock = installFetch(() => d.promise);
+
+    const { result, rerender } = renderHook(
+      ({ ticker }: { ticker: string }) => useQuote(ticker, 'KOSPI', { enabled: false }),
+      { initialProps: { ticker: '005930' } },
+    );
+
+    act(() => {
+      result.current.refetch();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // 응답이 오기 전에 다른 종목으로 바뀐다
+    rerender({ ticker: '000660' });
+    expect(result.current.quote).toBeNull(); // 000660엔 값이 없다
+
+    d.resolve({ ok: true, json: async () => ({ source: 'kis', quote: QUOTE }) });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // 005930의 응답이 뒤늦게 와도 지금 보고 있는 000660 값은 그대로 null이어야 한다
+    expect(result.current.quote).toBeNull();
+  });
+
+  it('비활성 refetch() 진행 중 enabled가 true가 되면 응답이 와도 중복 반영하지 않는다', async () => {
+    const d = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
+    const fetchMock = installFetch(() => d.promise);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useQuote('005930', 'KOSPI', { enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    act(() => {
+      result.current.refetch();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // 응답이 오기 전에 활성화된다 — 이제 구독이 값 갱신을 책임진다(같은 진행 중 요청을 공유해 받는다)
+    rerender({ enabled: true });
+
+    d.resolve({ ok: true, json: async () => ({ source: 'kis', quote: QUOTE2 }) });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // 구독 쪽 경로로 정상 반영됐는지만 확인한다(refetch()의 then이 별도로 덮어쓰지 않아도 결과는 같다)
+    expect(result.current.quote).toEqual(QUOTE2);
+    expect(result.current.stale).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 진행 중 요청을 공유했으므로 재요청이 없다
   });
 });

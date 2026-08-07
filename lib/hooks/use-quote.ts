@@ -3,9 +3,9 @@
 // 시세 폴링 훅 (PRD D3: MVP REST 폴링 5~10초).
 // 실제 폴링(타이머·요청 중복 제거·탭 가시성 대응)은 use-quote-store.ts가 담당한다.
 // 이 훅은 그 스토어의 얇은 구독자일 뿐이다 — 여기서 setInterval이나 AbortController를 새로 두지 않는다.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Market, Quote } from '@/types';
-import { peekQuote, refetchQuote, subscribeQuote, type QuoteSnapshot } from './use-quote-store';
+import { peekQuote, refetchQuote, refetchQuoteAndWait, subscribeQuote, type QuoteSnapshot } from './use-quote-store';
 
 export interface UseQuoteOptions {
   intervalMs?: number;
@@ -57,8 +57,34 @@ export function useQuote(ticker: string, market: Market, opts: UseQuoteOptions =
     return subscribeQuote(ticker, market, { intervalMs }, setSnapshot);
   }, [ticker, market, intervalMs, enabled]);
 
+  // refetch()가 항상 "지금" 이 인스턴스의 ticker/market/enabled를 보도록 매 렌더 동기 갱신한다.
+  // useCallback의 deps로 만들면 콜백 정체성이 매번 바뀌므로, ref로 최신값만 따로 들고 있는다.
+  const latestRef = useRef({ ticker, market, enabled });
+  latestRef.current = { ticker, market, enabled };
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const refetch = useCallback(() => {
-    refetchQuote(ticker, market);
+    if (latestRef.current.enabled) {
+      refetchQuote(ticker, market);
+      return;
+    }
+    // 비활성 상태: 구독을 새로 만들지 않고(=타이머를 걸지 않고) 1회 요청만 보내고,
+    // 그 결과를 이 인스턴스 상태에 직접 반영한다. 응답이 오는 동안 ticker/market이 바뀌거나
+    // enabled가 true가 되거나(구독이 이미 최신값을 반영 중) 언마운트되면 결과를 버린다.
+    void refetchQuoteAndWait(ticker, market).then((snap) => {
+      if (!mountedRef.current) return;
+      const latest = latestRef.current;
+      if (latest.enabled) return;
+      if (latest.ticker !== ticker || latest.market !== market) return;
+      setSnapshot(snap);
+    });
   }, [ticker, market]);
 
   return {

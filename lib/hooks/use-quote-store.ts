@@ -247,6 +247,18 @@ export function refetchQuote(ticker: string, market: Market): void {
   void fetchNow(entry);
 }
 
+/**
+ * 구독 없이 1회 갱신하고, 그 요청이 끝난 뒤의 스냅샷을 기다린다.
+ * `refetchQuote`와 달리 결과를 돌려주므로, 구독하지 않는 소비자(예: `enabled:false`인 훅)가
+ * 수동 갱신 결과를 반영할 때 쓴다. 진행 중 요청이 있으면 새로 만들지 않고 그 요청을
+ * 공유한다(`fetchNow`와 동일한 dedupe). 타이머를 걸지 않고 구독자도 늘리지 않는다 — 호출이
+ * 끝나면 스토어에 남는 건 엔트리 값뿐이라, 화면 밖 타일이 이 호출 하나로 다시 폴링을 시작하지 않는다.
+ */
+export function refetchQuoteAndWait(ticker: string, market: Market): Promise<QuoteSnapshot> {
+  const entry = getOrCreate(ticker, market);
+  return fetchNow(entry).then(() => entry.snapshot);
+}
+
 /** 구독자 없이 스냅샷만 읽는다(구독하지 않는 소비자용) */
 export function peekQuote(ticker: string, market: Market): QuoteSnapshot | null {
   sweepIdle(Date.now());

@@ -3,6 +3,7 @@ import type { Quote } from '@/types';
 import {
   subscribeQuote,
   refetchQuote,
+  refetchQuoteAndWait,
   peekQuote,
   __resetQuoteStore,
   type QuoteSnapshot,
@@ -344,6 +345,53 @@ describe('refetchQuote', () => {
     d.resolve({ ok: true, json: async () => ({ source: 'kis', quote: QUOTE }) });
     await vi.advanceTimersByTimeAsync(0);
     unsub();
+  });
+});
+
+describe('refetchQuoteAndWait', () => {
+  it('구독자 없이 1회 요청하고, 완료된 스냅샷을 돌려준다 — 타이머는 걸지 않는다', async () => {
+    const fetchMock = installFetch(okFetch());
+
+    const snap = await refetchQuoteAndWait('005930', 'KOSPI');
+
+    expect(snap.quote).toEqual(QUOTE);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0); // 구독자가 없으므로 폴링 타이머가 걸리지 않는다
+
+    // 시간이 흘러도 재요청이 없어야 한다(타이머·구독자 모두 없음의 증거)
+    await vi.advanceTimersByTimeAsync(7000 * 3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('진행 중 요청이 있으면 새로 만들지 않고 그 요청을 공유한다', async () => {
+    const d = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
+    const fetchMock = installFetch(() => d.promise);
+
+    // 구독자가 이미 요청을 진행 중인 상태를 만든다
+    const unsub = subscribeQuote('005930', 'KOSPI', { intervalMs: 7000 }, () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const waitPromise = refetchQuoteAndWait('005930', 'KOSPI');
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 새 요청을 만들지 않았다
+
+    d.resolve({ ok: true, json: async () => ({ source: 'kis', quote: QUOTE }) });
+    const snap = await waitPromise;
+
+    expect(snap.quote).toEqual(QUOTE);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    unsub();
+  });
+
+  it('실패한 요청도 완료된 스냅샷(error 채워짐)을 돌려준다', async () => {
+    installFetch(async () => {
+      throw new Error('network down');
+    });
+
+    const snap = await refetchQuoteAndWait('005930', 'KOSPI');
+
+    expect(snap.error).toBe('network down');
+    expect(snap.quote).toBeNull();
   });
 });
 
