@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CompanyLogo } from '@/components/ui/company-logo';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { formatMoney } from '@/lib/utils/money';
 import { evalHolding } from '@/lib/utils/portfolio';
 import type { RealHolding, WatchlistItem } from '@/types';
@@ -53,8 +54,15 @@ export function WatchlistCard({
   onToggleEngineFlag,
   onPrice,
 }: WatchlistCardProps) {
-  const { quote, error, loading } = useQuote(item.ticker, item.market);
+  const [viewportRef, visible] = useInViewport<HTMLDivElement>();
+  const { quote, error, loading } = useQuote(item.ticker, item.market, { enabled: visible });
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sortId });
+
+  // dnd-kit의 정렬용 ref와 가시성 관측용 ref를 같은 루트 엘리먼트에 함께 건다.
+  const setRootRef = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    viewportRef.current = node;
+  };
 
   // 보유 종목 평가용으로 현재가를 매니저에 보고(요약바·도넛 합산)
   useEffect(() => {
@@ -72,7 +80,7 @@ export function WatchlistCard({
 
   return (
     <Card
-      ref={setNodeRef}
+      ref={setRootRef}
       style={style}
       className="relative gap-0 p-4 ring-border/70 transition-shadow hover:shadow-md"
     >

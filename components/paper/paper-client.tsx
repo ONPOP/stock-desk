@@ -15,6 +15,7 @@ import { NewSeasonDialog, type NewSeasonValues } from './new-season-dialog';
 import { ArchivedSeasons } from './archived-seasons';
 import { PortfolioSummaryBar, type AllocationSlice } from '@/components/stocks/portfolio-summary-bar';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
 import { summarizePortfolio, evalHolding } from '@/lib/utils/portfolio';
 import { formatMoney, minorToMajorNumber } from '@/lib/utils/money';
@@ -379,33 +380,7 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
                       ? 'text-down'
                       : 'text-muted-foreground'
                   : '';
-                return (
-                  <li key={p.stockId} className="flex items-center gap-2.5 py-2.5 text-sm">
-                    <CompanyLogo ticker={p.ticker} name={p.name} size={30} />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium">{p.name}</div>
-                      <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {p.qty.toLocaleString()}주 · 평단 {p.avgPrice != null ? formatMoney(p.avgPrice, p.currency) : '—'}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      {ev ? (
-                        <>
-                          <div className={`text-[13px] font-semibold tabular-nums ${cls}`}>
-                            {ev.evalPnl > 0 ? '+' : ''}
-                            {formatMoney(ev.evalPnl, p.currency)}
-                          </div>
-                          <div className={`font-mono text-[11px] tabular-nums ${cls}`}>
-                            {ev.evalRate > 0 ? '+' : ''}
-                            {ev.evalRate}%
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">—</span>
-                      )}
-                    </div>
-                  </li>
-                );
+                return <PositionRow key={p.stockId} position={p} ev={ev} cls={cls} onPrice={handlePrice} />;
               })}
             </ul>
           )}
@@ -457,10 +432,6 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
 
       <ArchivedSeasons />
 
-      {/* 보유 종목 현재가 폴링(숨김) → 하단 수익 요약바 */}
-      {state.positions.map((p) => (
-        <PositionPricePoller key={p.stockId} position={p} onPrice={handlePrice} />
-      ))}
       {holdings.length > 0 && <PortfolioSummaryBar summary={summary} allocation={allocation} ready={ready} />}
 
       {showNewSeason && (
@@ -476,14 +447,64 @@ export function PaperClient({ initialState }: { initialState: PaperState }) {
   );
 }
 
-function PositionPricePoller({
+// 보유 종목 1행 — 화면에 보일 때만 현재가를 폴링해 onPrice로 보고한다(하단 수익 요약바용).
+// 시세 폴링(PositionPricePoller)은 DOM을 그리지 않으므로, 가시성 관측은 실제로 보이는 이 <li>에 붙이고
+// 그 결과를 폴링 쪽 enabled로 넘긴다.
+function PositionRow({
   position,
+  ev,
+  cls,
   onPrice,
 }: {
   position: PaperPosition;
+  ev: ReturnType<typeof evalHolding> | null;
+  cls: string;
   onPrice: (stockId: string, priceMinor: number) => void;
 }) {
-  const { quote } = useQuote(position.ticker, position.market, { enabled: true });
+  const [ref, visible] = useInViewport<HTMLLIElement>();
+  return (
+    <>
+      <li ref={ref} className="flex items-center gap-2.5 py-2.5 text-sm">
+        <CompanyLogo ticker={position.ticker} name={position.name} size={30} />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{position.name}</div>
+          <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            {position.qty.toLocaleString()}주 · 평단{' '}
+            {position.avgPrice != null ? formatMoney(position.avgPrice, position.currency) : '—'}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          {ev ? (
+            <>
+              <div className={`text-[13px] font-semibold tabular-nums ${cls}`}>
+                {ev.evalPnl > 0 ? '+' : ''}
+                {formatMoney(ev.evalPnl, position.currency)}
+              </div>
+              <div className={`font-mono text-[11px] tabular-nums ${cls}`}>
+                {ev.evalRate > 0 ? '+' : ''}
+                {ev.evalRate}%
+              </div>
+            </>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">—</span>
+          )}
+        </div>
+      </li>
+      <PositionPricePoller position={position} onPrice={onPrice} enabled={visible} />
+    </>
+  );
+}
+
+function PositionPricePoller({
+  position,
+  onPrice,
+  enabled,
+}: {
+  position: PaperPosition;
+  onPrice: (stockId: string, priceMinor: number) => void;
+  enabled: boolean;
+}) {
+  const { quote } = useQuote(position.ticker, position.market, { enabled });
   useEffect(() => {
     if (quote) onPrice(position.stockId, quote.price);
   }, [quote, position.stockId, onPrice]);

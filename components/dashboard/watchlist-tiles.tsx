@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CompanyLogo } from '@/components/ui/company-logo';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { formatMoney } from '@/lib/utils/money';
 import type { WatchlistItem } from '@/types';
 
@@ -17,11 +18,13 @@ function changeColor(c: number): string {
 }
 
 function Row({ item }: { item: WatchlistItem }) {
-  const { quote, error } = useQuote(item.ticker, item.market);
+  const [ref, visible] = useInViewport<HTMLAnchorElement>();
+  const { quote, error } = useQuote(item.ticker, item.market, { enabled: visible });
   const name = item.name_kr ?? item.name_en ?? item.ticker;
 
   return (
     <Link
+      ref={ref}
       href={`/stocks/${item.ticker}?market=${item.market}`}
       className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/60"
     >

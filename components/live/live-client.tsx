@@ -8,6 +8,7 @@ import { OrderbookPanel } from '@/components/live/orderbook-panel';
 import { QuickOrder } from '@/components/live/quick-order';
 import { AutoTradePanel } from '@/components/live/auto-trade-panel';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { useRealtimeQuote } from '@/lib/hooks/use-realtime-quote';
 import { RealtimeProvider } from '@/lib/realtime/provider';
 import { formatMoney, formatCompactMoney } from '@/lib/utils/money';
@@ -19,10 +20,12 @@ function changeColor(change: number): string {
 }
 
 function WatchRow({ item, selected, onSelect }: { item: WatchlistItem; selected: boolean; onSelect: () => void }) {
-  const { quote } = useQuote(item.ticker, item.market);
+  const [ref, visible] = useInViewport<HTMLButtonElement>();
+  const { quote } = useQuote(item.ticker, item.market, { enabled: visible });
   const name = item.name_kr ?? item.name_en ?? item.ticker;
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onSelect}
       aria-current={selected ? 'true' : undefined}
