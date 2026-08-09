@@ -2,10 +2,10 @@
 
 // 워치리스트 종목 카드 — 실시간 시세 폴링(F3), 등락 색상(상승 빨강·하락 파랑), 즐겨찾기 토글,
 // 보유 시 평가손익·수익률, 같은 묶음 내 드래그 정렬(@dnd-kit), 상세 이동, 삭제.
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { CSS, useCombinedRefs } from '@dnd-kit/utilities';
 import { Crosshair, GripVertical, Megaphone, Star, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CompanyLogo } from '@/components/ui/company-logo';
 import { useQuote } from '@/lib/hooks/use-quote';
+import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { formatMoney } from '@/lib/utils/money';
 import { evalHolding } from '@/lib/utils/portfolio';
 import type { RealHolding, WatchlistItem } from '@/types';
@@ -53,8 +54,23 @@ export function WatchlistCard({
   onToggleEngineFlag,
   onPrice,
 }: WatchlistCardProps) {
-  const { quote, error, loading } = useQuote(item.ticker, item.market);
+  const [viewportRef, visible] = useInViewport<HTMLDivElement>();
+  const { quote, error, loading } = useQuote(item.ticker, item.market, { enabled: visible });
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sortId });
+
+  // dnd-kit의 정렬용 ref와 가시성 관측용 ref를 같은 루트 엘리먼트에 함께 건다.
+  // setNodeRef는 useSortable 내부에서 이미 안정적인 참조(useCombinedRefs 위에 useCallback([],[])로
+  // 구축)이므로, 우리 쪽 콜백도 같은 방식(useCallback([]))으로 안정화한 뒤 dnd-kit이 자기 자신을
+  // 합성할 때 쓰는 useCombinedRefs로 묶는다 — 매 렌더 새 함수를 만들면(예: 인라인 화살표) React가
+  // ref 콜백 아이덴티티 변경으로 보고 매번 null→node로 재등록해 dnd-kit의 ResizeObserver가
+  // unobserve/observe를 반복한다(폴링마다 재렌더되는 카드에서 특히 비용이 큼).
+  const setViewportNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      viewportRef.current = node;
+    },
+    [viewportRef],
+  );
+  const setRootRef = useCombinedRefs(setNodeRef, setViewportNode);
 
   // 보유 종목 평가용으로 현재가를 매니저에 보고(요약바·도넛 합산)
   useEffect(() => {
@@ -72,7 +88,7 @@ export function WatchlistCard({
 
   return (
     <Card
-      ref={setNodeRef}
+      ref={setRootRef}
       style={style}
       className="relative gap-0 p-4 ring-border/70 transition-shadow hover:shadow-md"
     >
