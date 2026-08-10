@@ -139,6 +139,18 @@ describe('uploadRunAssets', () => {
     expect(result.slides).toBe(0);
   });
 
+  it('macOS AppleDouble 부산물(._NN)은 세지도 올리지도 않는다', async () => {
+    // 개수가 틀리면 전량 성공 판정이 뒤집혀 로컬 삭제 게이트가 영원히 안 열린다(불변식 1)
+    await writeFile(path.join(dir, '._01.webp'), 'junk');
+    await writeFile(path.join(dir, 'thumbs', '._01.jpg'), 'junk');
+    const { db, objects } = fakeDb();
+
+    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot', { backoffMs: 1 });
+
+    expect(result).toEqual({ prefix: 'u1/2026-08-08/slot', slides: 3, thumbs: 3 });
+    expect([...objects].filter((k) => k.includes('._'))).toEqual([]);
+  });
+
   it('올릴 원본이 없으면 slides 0으로 조용히 끝낸다', async () => {
     const empty = await mkdtemp(path.join(tmpdir(), 'slide-empty-'));
     const { db } = fakeDb();

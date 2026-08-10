@@ -1,7 +1,16 @@
 // 텔레그램 봇 연결 조회(getMe·findChatId)·미디어그룹 전송 테스트.
 // global.fetch를 스텁해 실제 네트워크 없이 검증한다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CAPTION_LIMIT, findChatId, getMe, sendMediaGroup, sendPhoto, TelegramError, type TelegramConfig } from './telegram';
+import {
+  CAPTION_LIMIT,
+  findChatId,
+  getMe,
+  sendMediaGroup,
+  sendPhoto,
+  setTelegramFetch,
+  TelegramError,
+  type TelegramConfig,
+} from './telegram';
 
 const TOKEN = '123456:AA-secret-token-value';
 const cfg: TelegramConfig = { botToken: TOKEN, chatId: '999' };
@@ -17,6 +26,25 @@ function rateLimitResponse(retryAfterSec: number): Response {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  setTelegramFetch(null);
+});
+
+describe('setTelegramFetch', () => {
+  it('주입한 구현으로 보내고, null로 되돌리면 다시 전역 fetch를 쓴다', async () => {
+    const injected = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    const global = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    vi.stubGlobal('fetch', global);
+
+    setTelegramFetch(injected as unknown as typeof fetch);
+    await sendPhoto(cfg, new Uint8Array([1, 2, 3]), '01.webp');
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(global).not.toHaveBeenCalled();
+
+    setTelegramFetch(null);
+    await sendPhoto(cfg, new Uint8Array([1, 2, 3]), '01.webp');
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(global).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('getMe', () => {

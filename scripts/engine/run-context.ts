@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { dateInTz, KST_TZ } from '../../lib/utils/date';
 import { defaultStorageDir, resolveStorageRoot, slotRelDir } from '../../lib/engine/storage-path';
 import { loadEngineSettings, DEFAULT_ENGINE_SETTINGS, type EngineSettings } from '../../lib/engine/repository';
+import { engineFetch } from './http-dispatcher';
 
 export const DEFAULT_STORAGE_DIR = defaultStorageDir();
 
@@ -26,7 +27,11 @@ export function adminClient(): SupabaseClient {
   if (!url || !key) {
     throw new Error('Supabase 환경변수(NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)가 없습니다.');
   }
-  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  // 내장 fetch를 쓰면 TLS 손상 한 번에 프로세스의 남은 요청이 전부 죽는다(http-dispatcher.ts 참고).
+  return createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: engineFetch },
+  });
 }
 
 /**

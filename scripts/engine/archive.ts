@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Slide, StockCard } from '../../lib/engine/slide-schema';
+import { replaceSignals, upsertReport, type SlotSignalRow } from '../../lib/engine/archive-db';
 import { fallbackDir } from '../../lib/engine/fallback-queue';
 import { slidePrefix, uploadRunAssets } from '../../lib/engine/slide-storage';
 import { resolveRunDir, type RunMeta } from './run-context';
@@ -53,41 +54,31 @@ export async function archiveSlot(db: SupabaseClient, meta: RunMeta, dir: string
   const thumbPrefix = upload.slides > 0 || upload.thumbs > 0 ? upload.prefix : null;
   const slidesUploaded = slidePaths.length > 0 && upload.slides === slidePaths.length;
 
-  const { data: report, error: reportError } = await db
-    .from('analysis_reports')
-    .upsert(
-      {
-        user_id: meta.userId,
-        slot_id: meta.slotId,
-        run_date: meta.runDate,
-        run_at: meta.capturedAt,
-        market_overview: analysis.marketOverview,
-        stock_cards: analysis.stockCards,
-        slides,
-        slide_paths: slidePaths,
-        storage_state: slidePaths.length === 0 ? 'pending' : meta.storageState,
-        thumb_bucket_path: thumbPrefix,
-        usage_note: analysis.usageNote,
-      },
-      { onConflict: 'user_id,run_date,slot_id' },
-    )
-    .select('id')
-    .single();
-  if (reportError) throw new Error(`리포트 적재 실패: ${reportError.message}`);
+  // 이 기기의 Wi-Fi 경로는 간헐적으로 TLS 레코드를 손상시킨다(2026-08-10 규명). supabase-js는 그 실패를
+  // throw가 아니라 { error }로 돌려주므로 재시도는 archive-db.ts가 Error로 승격시킨 뒤에 건다.
+  const reportId = await upsertReport(db, {
+    userId: meta.userId,
+    slotId: meta.slotId,
+    runDate: meta.runDate,
+    runAt: meta.capturedAt,
+    marketOverview: analysis.marketOverview,
+    stockCards: analysis.stockCards,
+    slides,
+    slidePaths,
+    storageState: slidePaths.length === 0 ? 'pending' : meta.storageState,
+    thumbBucketPath: thumbPrefix,
+    usageNote: analysis.usageNote,
+  });
 
   const closeByTicker = new Map(snapshot.selected.map((s) => [s.ticker, s.priceData.close]));
   const stockIdByTicker = new Map(snapshot.selected.map((s) => [s.ticker, s.stockId]));
 
-  // 재실행 시 중복 누적을 막기 위해 같은 리포트의 기존 신호를 지우고 다시 넣는다
-  await db.from('slot_signals').delete().eq('report_id', report.id);
-
-  const rows = analysis.stockCards
+  const rows: SlotSignalRow[] = analysis.stockCards
     .filter((c) => stockIdByTicker.has(c.ticker))
     .map((c) => {
       const entry = entryOf(c);
       return {
         user_id: meta.userId,
-        report_id: report.id,
         stock_id: stockIdByTicker.get(c.ticker)!,
         signal_date: meta.runDate,
         signal: c.signal,
@@ -99,12 +90,10 @@ export async function archiveSlot(db: SupabaseClient, meta: RunMeta, dir: string
       };
     });
 
-  if (rows.length > 0) {
-    const { error } = await db.from('slot_signals').insert(rows);
-    if (error) throw new Error(`신호 적재 실패: ${error.message}`);
-  }
+  // 재실행 시 중복 누적을 막기 위해 같은 리포트의 기존 신호를 지우고 다시 넣는다(재시도 단위로 묶여 있다)
+  const signals = await replaceSignals(db, reportId, rows);
 
-  return { reportId: report.id as string, signals: rows.length, slides: slidePaths.length, slidesUploaded };
+  return { reportId, signals, slides: slidePaths.length, slidesUploaded };
 }
 
 /** DB 적재 실패분 보존 — 다음 실행에서 재시도할 수 있도록 경로만 남긴다 */

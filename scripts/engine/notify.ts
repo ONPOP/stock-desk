@@ -14,11 +14,17 @@ import {
   sendMessage,
   sendPhoto,
   sendSlotError,
+  setTelegramFetch,
   type TelegramConfig,
 } from '../../lib/engine/telegram';
 import { planSends, shouldNotify, type SendUnit } from '../../lib/engine/telegram-dispatch';
 import { recordError, resolveTelegramConfigForUser } from '../../lib/engine/telegram-settings';
 import { loadSettings, resolveRunDir } from './run-context';
+import { engineFetch } from './http-dispatcher';
+
+// 슬라이드 전량 발송은 장당 ~110KB를 연속으로 올린다. 내장 fetch로는 한 장이 TLS로 실패하는 순간
+// 남은 발송이 전부 죽는다(http-dispatcher.ts). 배치 전용 디스패처로 갈아끼운다.
+setTelegramFetch(engineFetch);
 
 /** 같은 챗 초당 1건 레이트리밋 회피용 전송 단위 간 간격 */
 const SEND_INTERVAL_MS = 1_000;

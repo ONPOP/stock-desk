@@ -36,9 +36,21 @@ export interface UploadResult {
   thumbs: number;
 }
 
+/**
+ * macOS가 xattr를 지원하지 않는 볼륨(exFAT 외장 등)에 남기는 AppleDouble 부산물(`._01.jpg`)은
+ * 확장자가 같아서 그냥 세면 슬라이드로 잡힌다. 2026-08-10 실측: 썸네일 9장짜리 디렉터리가 18장으로
+ * 계상돼 쓰레기 객체가 Storage에 올라가 있었다.
+ *
+ * 개수가 틀리면 조용히 넘어가지 않고 판정이 뒤집힌다 — `uploadRunAssets`는 전량 성공을 개수로
+ * 판단하고, 호출부는 그 값으로 로컬 원본 삭제 여부를 정한다(불변식 1).
+ */
+function isAppleDouble(name: string): boolean {
+  return name.startsWith('._');
+}
+
 async function listByExt(dir: string, ext: string): Promise<string[]> {
   try {
-    return (await readdir(dir)).filter((f) => f.endsWith(`.${ext}`)).sort();
+    return (await readdir(dir)).filter((f) => f.endsWith(`.${ext}`) && !isAppleDouble(f)).sort();
   } catch {
     return [];
   }

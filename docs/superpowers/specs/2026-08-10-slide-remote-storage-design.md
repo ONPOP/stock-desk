@@ -292,9 +292,65 @@ npx tsc --noEmit && npm run lint && npm test
 3. **`lib/engine/telegram.ts`는 손대야 했다.** 첨부 Blob의 MIME이 `image/png`로 하드코딩돼 있어
    WebP 바이트와 어긋난다. 파일명 확장자에서 MIME을 유도하도록 고쳤다(`photoMime`).
 
+## 네트워크 — 재시도만으로는 안 됐다 (2026-08-10 규명)
+
+이 기기의 Wi-Fi 경로는 대용량 요청에서 TLS 레코드를 손상시킨다(`sslv3 alert bad record mac`).
+여기까지는 앞서 규명된 대로고, **환경 문제이며 회복 가능한 일시 실패**다.
+
+| 계측 (250KB POST) | 결과 |
+|---|---|
+| curl (HTTP/2, 매번 새 프로세스) | 17/20 성공 |
+| curl `--http1.1` | 19/20 성공 |
+| 소형 GET | 20/20 성공 — 실패는 대용량에 몰린다 |
+| Node 내장 전역 fetch | **7/20** — 첫 실패 뒤 전부 실패 |
+| undici Agent 명시 (h2) | 22/25, 실패 직후 회복 (`ooxoo…`) |
+| undici Agent 명시 (h1) | 23/25, 실패 직후 회복 |
+
+**핵심은 회복이 아니라 회복 불능이었다.** Node 내장 전역 fetch는 손상으로 죽은 HTTP/2 세션을
+캐시에 그대로 들고 있다. 최초 1회만 `ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC`이고 그 뒤로는 같은
+프로세스의 모든 요청이 `ERR_HTTP2_INVALID_SESSION`으로 죽는다 — 2·5·10·30·60초를 기다려도
+회복하지 않았다(총 107초 실측).
+
+따라서 "실패 후 2초면 회복한다"는 관찰은 **curl 기준**이고(curl은 매 호출이 새 프로세스·새 연결),
+같은 프로세스 안에서는 성립하지 않는다. 백오프를 아무리 늘려도 소용이 없다. 실제로 `archive.ts`에
+`withNetworkRetry`를 붙인 뒤에도 적재는 4/4 실패했다(두 번 재현).
+
+**대응:** `scripts/engine/http-dispatcher.ts`가 undici Agent(HTTP/1.1 고정)를 만들어
+`adminClient()`의 `global.fetch`와 텔레그램 발송(`setTelegramFetch`)에 넣는다. `undici`를 직접
+의존성으로 올렸다(전이 의존성은 electron·jsdom 경유 devDependency뿐이라 `--omit=dev`에서 깨진다).
+`lib/`이 아니라 `scripts/`에 둔 이유는 Next 라우트가 import하는 `lib/engine/telegram.ts`에 undici를
+끌어들이지 않기 위해서다 — 그쪽은 주입이 없으면 전역 fetch를 그대로 쓴다.
+
+검증: 이 디스패처로 backfill 223장을 연속 업로드하는 동안 연쇄 실패가 한 번도 없었다.
+
+## AppleDouble 부산물이 개수 판정을 뒤집고 있었다 (2026-08-10)
+
+`slide-storage.ts`의 `listByExt`가 macOS AppleDouble 파일(`._01.jpg`)을 걸러내지 않아 썸네일 9장짜리
+디렉터리가 18장으로 계상됐고, 쓰레기 객체 33개가 실제로 Storage에 올라가 있었다(삭제 완료).
+
+단순한 낭비가 아니라 **불변식 1의 판정을 뒤집는다**: `uploadRunAssets`는 전량 성공을 개수로 판단하고
+호출부는 그 값으로 로컬 삭제를 정하므로, `._NN.webp`가 하나라도 생기면 `upload.slides`가 정의 장수와
+영원히 어긋나 ⑧이 켜지지 않는다. `listByExt`에서 `._` 접두사를 제외하고 회귀 테스트를 붙였다.
+
+## 과거 리포트 backfill (2026-08-10 완료)
+
+`scripts/engine/backfill-slides.ts` — D19 이전 리포트는 원본이 로컬 PNG로만 있어 `/reports`가 썸네일로
+폴백했다. 로컬에 남은 자기완결 HTML을 **`slide-capture.ts`의 `measureFit`·`captureSlide`로 다시 찍어**
+WebP로 올리고 `slide_paths` 확장자를 갱신한다(PNG→WebP 변환 라이브러리를 들이지 않는다).
+
+결과: 17건 223장 backfill, 실패 0건. 리포트 20건 중 **19건이 원본으로 열람 가능**하다.
+남은 1건(`2026-08-05/kr_close_buy`)은 로컬 run 디렉터리 자체가 없어 복원 불가 — 썸네일 폴백을 유지한다.
+
+부수 확인: 구 PNG 중에는 배율 축소가 적용되지 않아 하단이 잘린 것이 있었다. 재캡처본은 `measureFit`을
+거치므로 잘림이 없다 — backfill은 형식 변환이 아니라 품질 개선이기도 하다.
+
 **아직 켜지 않은 것:** 로컬 원본 삭제. 설계서 롤백 항목의 "⑧을 마지막 작업으로 배치해 앞 단계가
 안정된 뒤 켠다"를 따라, 실제 슬롯이 한 번 성공적으로 돌아 Storage 적재·앱 열람·텔레그램 수신이
 확인된 뒤에 붙인다. 지금은 업로드만 하고 로컬을 남긴다(되돌릴 수 있는 상태).
+
+게이트 현황(2026-08-10 11:00): Storage 적재 ✅(kr_open_check 09:57 · kr_premarket 복구) ·
+서명 URL 실제 다운로드 ✅(14/14 `200 image/webp`) · 텔레그램 수신 ✅(09:57 슬롯).
+다만 텔레그램 디스패처 교체 이후로는 아직 실전 슬롯이 돌지 않았다 — **다음 슬롯 1회를 보고 켠다.**
 
 ## 미결 (착수 전 확인)
 

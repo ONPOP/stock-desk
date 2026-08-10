@@ -76,6 +76,7 @@
 - 스케줄 동기화: `npx tsx scripts/engine/install-schedule.ts` (`--dry`·`--status`·`--remove`)
 - 신호 채점: `npx tsx scripts/engine/grade-signals.ts` / 성적 집계: `grade-report.ts --slot <id> --days 7`
 - 만료 정리 미리보기: `npx tsx scripts/engine/purge.ts --dry` (실행은 `--dry` 없이. 슬롯 실행 시 자동으로 마지막에 돈다)
+- 과거 리포트 원본 backfill: `npx tsx scripts/engine/backfill-slides.ts --dry` (로컬 `html/`에서 재캡처 → WebP 업로드)
 - **설정은 앱에서**: `/reports` → [설정] 탭 (슬롯 시각·선정 규칙·관찰 규칙·테마·저장/예산). SQL 직접 수정 불필요.
 - 종목 단위 플래그: `/stocks` 카드의 📢 항상 브리핑(`always_brief`) · ⌖ 관찰 고정(`radar_pin`) 토글
 - 슬롯 시각 변경 후에는 [스케줄 반영] 버튼(또는 `install-schedule`)을 눌러야 launchd에 반영된다
@@ -84,6 +85,11 @@
 
 ### 장애 대응
 - 슬롯 실패 시 텔레그램 에러 알림이 발송된다. 로그: `data/logs/{date}/{slot}.log`
+- `TypeError: fetch failed`가 연속으로 나면 **백오프를 늘리지 마라.** 이 기기의 Wi-Fi 경로가 대용량
+  요청에서 TLS 레코드를 손상시키고(환경 문제, 일시적), Node 내장 fetch가 그때 죽은 HTTP/2 세션을
+  프로세스 끝까지 붙들어 남은 요청이 전부 죽는다(107초 대기에도 회복 안 됨). 배치는
+  `scripts/engine/http-dispatcher.ts`의 undici Agent를 거치므로 회복된다 — 새 배치 경로에서
+  Supabase 클라이언트나 fetch를 직접 만들면 이 보호를 잃는다.
 - Supabase 적재 실패분은 `data/fallback/`에 남고 다음 실행에서 재시도한다.
 - 시세 부분 실패는 정상 동작이다(해당 종목만 "데이터 미수집" 처리).
 - 지정 저장 볼륨이 연결돼 있지 않으면 기본 경로로 저장되고 `storage_state='fallback'`으로 표시된다.

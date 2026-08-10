@@ -60,6 +60,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let injectedFetch: typeof fetch | null = null;
+
+/**
+ * 배치 경로가 자기 HTTP 디스패처를 넣기 위한 스위치 (D19).
+ *
+ * Node 내장 fetch는 TLS 레코드가 손상되면 죽은 HTTP/2 세션을 프로세스가 끝날 때까지 붙들고 있어서,
+ * 슬라이드 한 장이 실패하는 순간 남은 발송이 전부 `ERR_HTTP2_INVALID_SESSION`으로 죽는다
+ * (2026-08-10 실측 · scripts/engine/http-dispatcher.ts). 장당 ~110KB를 10장 넘게 올리는 알림 경로가
+ * 특히 위험하다.
+ *
+ * 기본값은 그대로 전역 fetch다 — Next 라우트(getMe·findChatId)는 아무 영향을 받지 않고,
+ * undici가 웹 번들로 들어가지도 않는다. `null`을 넣으면 전역 fetch로 되돌린다.
+ */
+export function setTelegramFetch(impl: typeof fetch | null): void {
+  injectedFetch = impl;
+}
+
+/** 주입값이 없으면 호출 시점의 전역 fetch를 쓴다(테스트의 stubGlobal이 그대로 통하도록) */
+function httpFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return (injectedFetch ?? globalThis.fetch)(input, init);
+}
+
 /**
  * 실제 fetch 1회. 토큰은 URL 조립에만 쓰고, 에러 메시지에는 마스킹해서만 남긴다.
  * `cfg.botToken`을 참조하지 않는 호출자(getMe·findChatId)도 이 함수를 거치면 동일하게 마스킹된다.
@@ -68,7 +90,7 @@ async function request(botToken: string, method: string, body: BodyInit, headers
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${API_BASE}/bot${botToken}/${method}`, {
+    const res = await httpFetch(`${API_BASE}/bot${botToken}/${method}`, {
       method: 'POST',
       body,
       headers,

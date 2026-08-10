@@ -11,9 +11,13 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { dateInTz, KST_TZ } from '../../lib/utils/date';
 import { dataDir } from '../../lib/engine/data-dir';
-import { sendSlotError } from '../../lib/engine/telegram';
+import { sendSlotError, setTelegramFetch } from '../../lib/engine/telegram';
 import { resolveTelegramConfigForUser } from '../../lib/engine/telegram-settings';
 import { adminClient, loadSettings, resolveUserId } from './run-context';
+import { engineFetch } from './http-dispatcher';
+
+// 실패 알림까지 내장 fetch의 죽은 세션에 걸리면 "왜 죽었는지"조차 못 받는다
+setTelegramFetch(engineFetch);
 
 type SlotType = 'quick' | 'detail' | 'grade' | 'weekly';
 
