@@ -112,6 +112,11 @@ export const analysisOutputSchema = z.object({
   stockCards: z.array(stockCardSchema),
   // 기존 리포트에는 없던 필드라 기본값으로 호환시킨다
   radarNotes: z.array(radarNoteSchema).default([]),
+  /**
+   * weekly 슬롯의 signal_rules 개선 제안 (제안만 — DB는 건드리지 않는다).
+   * marketOverview.summary에 섞여 들어가 시장 개요 슬라이드를 넘치게 했으므로 별도 필드로 분리했다.
+   */
+  ruleProposals: z.array(z.string()).default([]),
   usageNote: z.string(),
 });
 

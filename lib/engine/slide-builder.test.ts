@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSlides, buildTelegramSummary, type BuildSlidesInput, type SnapshotSelected } from './slide-builder';
 import type { AnalysisOutput, StockCard } from './slide-schema';
 import { renderSlideHtml } from './slide-html';
+import { MARKET_BUDGET } from './slide-budget';
 
 function selected(ticker: string): SnapshotSelected {
   return {
@@ -41,12 +42,19 @@ function card(ticker: string, signal: StockCard['signal'] = 'BUY'): StockCard {
   };
 }
 
-function inputOf(cards: StockCard[], selectedTickers: string[], failed: string[] = []): BuildSlidesInput {
+function inputOf(
+  cards: StockCard[],
+  selectedTickers: string[],
+  failed: string[] = [],
+  patch: Partial<AnalysisOutput> = {},
+): BuildSlidesInput {
   const analysis: AnalysisOutput = {
     marketOverview: { summary: '지수 강보합', themeFlows: [], macroEvents: ['FOMC'] },
     stockCards: cards,
     radarNotes: [],
+    ruleProposals: [],
     usageNote: '검색 6회',
+    ...patch,
   };
   return {
     slotLabel: '한국 종가 매수 판단',
@@ -100,6 +108,35 @@ describe('buildSlides', () => {
     const cover = slides[0];
     if (cover.kind !== 'cover') throw new Error('cover 아님');
     expect(cover.headline).toContain('매수 후보 없음');
+  });
+
+  it('시장 개요를 한 장 예산 안으로 줄여 담는다', () => {
+    const slides = buildSlides(
+      inputOf([card('005930')], ['005930'], [], {
+        marketOverview: {
+          summary: '가'.repeat(MARKET_BUDGET.summaryChars + 500),
+          themeFlows: [],
+          macroEvents: [],
+        },
+      }),
+    );
+    const market = slides.find((s) => s.kind === 'market');
+    if (market?.kind !== 'market') throw new Error('market 아님');
+    expect(market.overview.summary.length).toBeLessThanOrEqual(MARKET_BUDGET.summaryChars);
+  });
+
+  it('규칙 개선안이 있으면 전용 슬라이드로 분리한다', () => {
+    const slides = buildSlides(
+      inputOf([card('005930')], ['005930'], [], { ruleProposals: ['RSI 상한을 70으로', '거래량 배수 1.5배로'] }),
+    );
+    const proposal = slides.find((s) => s.kind === 'text' && s.title === '규칙 개선 제안');
+    if (proposal?.kind !== 'text') throw new Error('규칙 개선 제안 슬라이드 없음');
+    expect(proposal.bullets).toEqual(['RSI 상한을 70으로', '거래량 배수 1.5배로']);
+  });
+
+  it('규칙 개선안이 없으면 그 슬라이드를 만들지 않는다', () => {
+    const slides = buildSlides(inputOf([card('005930')], ['005930']));
+    expect(slides.some((s) => s.kind === 'text' && s.title === '규칙 개선 제안')).toBe(false);
   });
 });
 

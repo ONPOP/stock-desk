@@ -149,6 +149,17 @@ export async function sendMessage(cfg: TelegramConfig, text: string): Promise<vo
   );
 }
 
+/**
+ * 첨부 MIME은 파일명에서 유도한다.
+ * 예전에는 'image/png'로 고정돼 있었는데, 슬라이드가 WebP로 바뀌면(D19) 바이트와 어긋난다.
+ */
+function photoMime(filename: string): string {
+  const ext = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  return 'image/png';
+}
+
 export async function sendPhoto(
   cfg: TelegramConfig,
   photo: Uint8Array,
@@ -158,7 +169,7 @@ export async function sendPhoto(
   const form = new FormData();
   form.append('chat_id', cfg.chatId);
   if (caption) form.append('caption', caption.slice(0, CAPTION_LIMIT));
-  form.append('photo', new Blob([new Uint8Array(photo)], { type: 'image/png' }), filename);
+  form.append('photo', new Blob([new Uint8Array(photo)], { type: photoMime(filename) }), filename);
   await call(cfg, 'sendPhoto', form);
 }
 
@@ -175,7 +186,7 @@ export async function sendMediaGroup(
   form.append('chat_id', cfg.chatId);
   const media = photos.map((photo, index) => {
     const attachName = `photo${index}`;
-    form.append(attachName, new Blob([new Uint8Array(photo.bytes)], { type: 'image/png' }), photo.filename);
+    form.append(attachName, new Blob([new Uint8Array(photo.bytes)], { type: photoMime(photo.filename) }), photo.filename);
     return {
       type: 'photo' as const,
       media: `attach://${attachName}`,

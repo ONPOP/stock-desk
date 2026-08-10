@@ -27,7 +27,9 @@ macroEvents에 향후 5영업일 리스크 캘린더를 포함하라.`;
 const WEEKLY_EXTRA = `
 ## 이 슬롯은 weekly 유형이다
 스킬의 "weekly 슬롯 절차"를 따른다. grade.json을 읽어 적중률·패인을 분석하고
-signal_rules 개선안을 marketOverview에 제안만 하라 (DB 수정 금지).`;
+signal_rules 개선안을 \`ruleProposals\` 배열에 항목별로 제안만 하라 (DB 수정 금지).
+개선안을 \`marketOverview.summary\`에 넣지 마라 — 시장 개요 슬라이드가 넘쳐 잘린다.
+개선안은 별도 슬라이드로 렌더된다.`;
 
 interface StepResult {
   ok: boolean;
@@ -131,7 +133,7 @@ async function main(): Promise<void> {
     await fail('분석', `analysis.json이 생성되지 않았습니다: ${analysisPath}`);
   }
 
-  // [3] 슬라이드 렌더 (PNG + 썸네일)
+  // [3] 슬라이드 렌더 (WebP + 썸네일)
   const step3 = await tsx('render-slides.ts', ['--slot', slotId, '--date', runDate]);
   if (!step3.ok) await fail('렌더', step3.reason ?? '실패');
 
@@ -139,9 +141,15 @@ async function main(): Promise<void> {
   const step4 = await tsx('archive.ts', ['--slot', slotId, '--date', runDate]);
   if (!step4.ok) await fail('적재', step4.reason ?? '실패');
 
-  // [5] 알림
+  // [5] 알림 — 텔레그램은 로컬 파일을 읽는다(불변식 9). 정리는 반드시 이 뒤다.
   const step5 = await tsx('notify.ts', ['--slot', slotId, '--date', runDate]);
   if (!step5.ok) await fail('알림', step5.reason ?? '실패');
+
+  // [6] 만료 정리 (D19) — 알림까지 끝난 뒤의 뒷정리라 실패해도 슬롯을 실패로 만들지 않는다.
+  //     정리는 멱등이므로 다음 실행에서 다시 시도된다.
+  //     --include-news: news_items는 user_id가 없는 공용 테이블이라 전역 삭제다(사용자 승인 2026-08-10).
+  const step6 = await tsx('purge.ts', ['--include-news']);
+  if (!step6.ok) console.warn(`⚠ 정리 실패(슬롯은 성공 처리): ${step6.reason ?? '실패'}`);
 
   console.log(`\n✅ 슬롯 ${slotId} 완료`);
 }

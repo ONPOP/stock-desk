@@ -224,7 +224,10 @@ body{background:${T.bg};color:${T.text};
   background:linear-gradient(90deg,${T.up},${T.accent},${T.down})}
 h1{font-size:68px;font-weight:800;letter-spacing:-2px}
 h2{font-size:38px;font-weight:750;letter-spacing:-1px}
-.lead{color:${T.muted};font-size:21px;max-width:1180px}
+/* 폭을 1180px로 묶으면 같은 글자가 줄 수만 늘어 아래 패널을 밀어낸다.
+   운영 산출물 17건 실측: 폭 제한 해제만으로 맞춤 배율 최저 62% → 68%(표 글자 11.8px → 12.9px).
+   글자 크기를 줄이는 쪽은 배율이 오른 만큼 작아져 상쇄되므로 효과가 없다. */
+.lead{color:${T.muted};font-size:21px}
 .muted,.empty{color:${T.muted}}
 .up{color:${T.up}}.down{color:${T.down}}.flat{color:${T.muted}}
 

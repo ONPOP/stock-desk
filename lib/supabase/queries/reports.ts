@@ -25,6 +25,7 @@ interface ReportRow {
   storage_state: 'pending' | 'stored' | 'fallback';
   slides: Array<{ kind: string; headline?: string }> | null;
   stock_cards: Array<{ signal: string }> | null;
+  thumb_bucket_path: string | null;
 }
 
 function toSummary(r: ReportRow): ReportSummary {
@@ -44,7 +45,8 @@ function toSummary(r: ReportRow): ReportSummary {
   };
 }
 
-const SUMMARY_COLUMNS = 'id, slot_id, run_date, run_at, slide_paths, storage_state, slides, stock_cards';
+const SUMMARY_COLUMNS =
+  'id, slot_id, run_date, run_at, slide_paths, storage_state, slides, stock_cards, thumb_bucket_path';
 
 /** 리포트가 존재하는 날짜 목록 (최신순) — 좌측 날짜 레일 */
 export async function listReportDates(db: SupabaseClient, userId: string, limit = 120): Promise<string[]> {
@@ -95,6 +97,8 @@ export async function latestReportDate(db: SupabaseClient, userId: string): Prom
 
 export interface ReportDetail extends ReportSummary {
   slidePaths: string[];
+  /** Storage 프리픽스(`{userId}/{runDate}/{slotId}`) — 슬라이드 서빙에서만 쓴다 */
+  bucketPrefix: string | null;
 }
 
 export async function getReport(
@@ -111,5 +115,5 @@ export async function getReport(
   if (error) throw new Error(`리포트 조회 실패: ${error.message}`);
   if (!data) return null;
   const row = data as unknown as ReportRow;
-  return { ...toSummary(row), slidePaths: row.slide_paths ?? [] };
+  return { ...toSummary(row), slidePaths: row.slide_paths ?? [], bucketPrefix: row.thumb_bucket_path };
 }

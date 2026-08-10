@@ -18,9 +18,9 @@
 ```json
 {
   "marketOverview": {
-    "summary": "지수·테마 흐름 3~5줄",
-    "themeFlows": [{ "theme": "...", "todayBp": 0, "trend": "...", "comment": "..." }],
-    "macroEvents": ["오늘/내일 주요 이벤트"]
+    "summary": "지수·테마 흐름 3~5줄 (800자 이내)",
+    "themeFlows": [{ "theme": "테마명 28자", "todayBp": 0, "trend": "짧은 상태 라벨 44자", "comment": "110자" }],
+    "macroEvents": ["오늘/내일 주요 이벤트 — 항목당 110자"]
   },
   "stockCards": [
     {
@@ -43,9 +43,17 @@
   "radarNotes": [
     { "ticker": "000660", "comment": "1~2줄 코멘트" }
   ],
+  "ruleProposals": ["weekly 슬롯에서만 채운다 — 그 외에는 []"],
   "usageNote": "검색 총 N회 사용"
 }
 ```
+
+## 분량 상한 (슬라이드가 1600×900 한 장이다)
+
+`marketOverview`는 슬라이드 한 장에 그대로 들어간다. 위 괄호의 글자 수를 넘기면 렌더러가 잘라내므로
+**넘긴 만큼은 독자에게 도달하지 않는다.** `themeFlows`·`macroEvents`는 각각 최대 10개다.
+`trend`는 문장이 아니라 상태 라벨이다("4거래일 연속 상승, 외국인 순매수 주도" 같은 서술은 `comment`로 보낸다).
+분량이 부족하면 종목 카드가 아니라 **덜 중요한 항목을 버려서** 맞춘다.
 
 ## 눌림목 관찰 코멘트 (radarNotes)
 

@@ -35,6 +35,7 @@
 | D10 | 뉴스·AI(W4): 한국 뉴스=네이버, 미국 뉴스=Finnhub. AI(요약·감성·공시요약·브리핑)=OpenAI gpt-4o-mini(Vercel AI SDK). AI 호출은 수동 갱신 트리거, 자동 크론은 골격만(배포 후 등록) |
 | D16 | 정기 배치 분석 엔진: TypeScript(`lib/engine/`·`scripts/engine/`), LLM은 `claude -p` 헤드리스 전용, 실행은 로컬 launchd, 산출물은 pptx가 아닌 슬라이드 PNG(앱 `/reports` 열람), 저장 루트는 외장 볼륨 지정 가능 |
 | D18 | 텔레그램 슬롯 알림: 봇 토큰은 신규 테이블 `engine_telegram`에 AES-256 암호화 저장, chat id는 `getUpdates` 자동 획득(수동 입력 없음), 알림은 슬롯별 on/off + 켜진 슬롯은 슬라이드 전량을 사진 미디어그룹 발송, 실패 알림은 on/off 무관 항상 발송 |
+| D19 | 슬라이드 원격 저장: 원본을 **WebP q82**로 Supabase Storage(`analysis-slides`)에 적재하고 앱은 서명 URL 302로 서빙(썸네일 폴백). 보존은 원본 `engine_settings.retention_days`(0=무제한) · `market_snapshots` 90일이며 `lib/engine/retention.ts`가 단일 출처. 스키마 변경 없음 |
 
 **스펙 변경 규칙**: 개발 중 결정 변경이 발생하면 임의 결정하지 말고 사용자 승인 후 `docs/PRD.md`의 Decision Log에 **D9부터 추가 기록**한다.
 
@@ -74,6 +75,7 @@
 - 파이프라인만 검증: `npx tsx scripts/engine/pipeline.ts --test` (2종목) / `--bench` (30종목 성능)
 - 스케줄 동기화: `npx tsx scripts/engine/install-schedule.ts` (`--dry`·`--status`·`--remove`)
 - 신호 채점: `npx tsx scripts/engine/grade-signals.ts` / 성적 집계: `grade-report.ts --slot <id> --days 7`
+- 만료 정리 미리보기: `npx tsx scripts/engine/purge.ts --dry` (실행은 `--dry` 없이. 슬롯 실행 시 자동으로 마지막에 돈다)
 - **설정은 앱에서**: `/reports` → [설정] 탭 (슬롯 시각·선정 규칙·관찰 규칙·테마·저장/예산). SQL 직접 수정 불필요.
 - 종목 단위 플래그: `/stocks` 카드의 📢 항상 브리핑(`always_brief`) · ⌖ 관찰 고정(`radar_pin`) 토글
 - 슬롯 시각 변경 후에는 [스케줄 반영] 버튼(또는 `install-schedule`)을 눌러야 launchd에 반영된다

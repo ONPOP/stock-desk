@@ -40,15 +40,20 @@ description: "정기 슬롯 주식 분석 스킬. scripts/engine/run-slot.ts가 
 ```json
 {
   "marketOverview": {
-    "summary": "지수·테마 흐름 3~5줄",
-    "themeFlows": [{ "theme": "...", "todayBp": 0, "trend": "...", "comment": "..." }],
-    "macroEvents": ["오늘/내일 주요 이벤트"]
+    "summary": "지수·테마 흐름 3~5줄 (800자 이내)",
+    "themeFlows": [{ "theme": "28자", "todayBp": 0, "trend": "상태 라벨 44자", "comment": "110자" }],
+    "macroEvents": ["오늘/내일 주요 이벤트 — 항목당 110자"]
   },
   "stockCards": [ /* 아래 종목 카드 스키마 */ ],
   "radarNotes": [{ "ticker": "000660", "comment": "1~2줄" }],
+  "ruleProposals": ["weekly 슬롯에서만 채운다 — 그 외에는 []"],
   "usageNote": "검색 총 N회 사용"
 }
 ```
+
+`marketOverview`는 1600×900 슬라이드 **한 장**에 통째로 들어간다. 위 글자 수를 넘기면 렌더러가 잘라내고,
+`themeFlows`·`macroEvents`는 각각 10개까지만 실린다. `trend`는 문장이 아니라 상태 라벨이다 —
+서술은 `comment`로 보낸다.
 
 ### 종목 카드 스키마
 
@@ -98,7 +103,8 @@ quick 절차 완료 후, `marketOverview.summary`를 더 길게(섹션별 서술
 
 1. `<슬롯 디렉토리>/grade.json`(지난 7일 채점 요약)을 읽어 신호별 적중률·갭 분포·패인을 분석한다.
 2. 성적이 나쁜 룰 조건을 특정하고 `signal_rules` 개선안을 **제안만** 한다 — 자동 변경 금지, 사용자 승인 필요.
-3. 제안은 `marketOverview.summary`와 `macroEvents`에 서술한다. DB를 직접 수정하지 마라.
+3. 제안은 `ruleProposals` 배열에 **항목별로 한 줄씩** 담는다(별도 슬라이드로 렌더된다). DB를 직접 수정하지 마라.
+   `marketOverview.summary`에 섞지 마라 — 시장 개요는 한 장짜리 슬라이드라 넘치면 잘린다.
 
 ## 금지 사항
 

@@ -2,6 +2,7 @@
 // Claude는 슬라이드를 만들지 않는다(판단 JSON만). 구성·순서·수치 포맷은 전부 여기서 결정한다.
 
 import type { WatchZoneRules } from '@/lib/engine/rules';
+import { applyMarketBudget } from '@/lib/engine/slide-budget';
 import type { AnalysisOutput, Slide, StockCard } from '@/lib/engine/slide-schema';
 
 /** 파이프라인이 남긴 snapshot.json의 선정 종목 (렌더에 필요한 필드만) */
@@ -129,7 +130,8 @@ export function buildSlides(input: BuildSlidesInput): Slide[] {
         { label: '미수집', value: String(input.failedTickers.length) },
       ],
     },
-    { kind: 'market', overview: input.analysis.marketOverview },
+    // LLM 출력은 길이 상한이 없다 — 슬라이드에 넣기 전에 한 장 분량으로 줄인다(원본은 DB에 그대로 남는다)
+    { kind: 'market', overview: applyMarketBudget(input.analysis.marketOverview) },
   ];
 
   for (const card of cards) {
@@ -171,6 +173,15 @@ export function buildSlides(input: BuildSlidesInput): Slide[] {
         { label: '평균 갭', value: fmtPct(g.avgGapBp), tone: (g.avgGapBp ?? 0) >= 0 ? 'up' : 'down' },
       ],
       note: g.note,
+    });
+  }
+
+  // weekly 슬롯 전용 — 시장 개요에 섞으면 그 슬라이드가 넘친다(2026-08-08 weekly_review 잘림)
+  if (input.analysis.ruleProposals.length > 0) {
+    slides.push({
+      kind: 'text',
+      title: '규칙 개선 제안',
+      bullets: input.analysis.ruleProposals,
     });
   }
 

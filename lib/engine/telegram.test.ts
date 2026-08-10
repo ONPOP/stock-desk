@@ -91,6 +91,44 @@ describe('findChatId', () => {
   });
 });
 
+describe('첨부 MIME', () => {
+  function formOf(fetchMock: ReturnType<typeof vi.fn>): FormData {
+    return (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+  }
+
+  it('sendPhoto는 파일 확장자에 맞는 MIME으로 첨부한다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendPhoto(cfg, new Uint8Array([1]), '01.webp');
+
+    expect((formOf(fetchMock).get('photo') as File).type).toBe('image/webp');
+  });
+
+  it('sendMediaGroup도 항목마다 확장자에 맞춘다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendMediaGroup(cfg, [
+      { bytes: new Uint8Array([1]), filename: '01.webp' },
+      { bytes: new Uint8Array([2]), filename: '02.jpg' },
+    ]);
+
+    const form = formOf(fetchMock);
+    expect((form.get('photo0') as File).type).toBe('image/webp');
+    expect((form.get('photo1') as File).type).toBe('image/jpeg');
+  });
+
+  it('모르는 확장자는 image/png로 둔다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendPhoto(cfg, new Uint8Array([1]), 'slide');
+
+    expect((formOf(fetchMock).get('photo') as File).type).toBe('image/png');
+  });
+});
+
 describe('sendMediaGroup', () => {
   it('사진 3장을 fetch 1회로 보내고, FormData에 media JSON과 첨부 3개가 실린다', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: [] }));

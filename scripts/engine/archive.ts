@@ -1,18 +1,17 @@
-// 슬롯 결과 적재 (D16 Phase 2) — analysis_reports · slot_signals + 썸네일 업로드.
+// 슬롯 결과 적재 (D16 Phase 2) — analysis_reports · slot_signals + 슬라이드 원본·썸네일 업로드(D19).
 //
 //   npx tsx scripts/engine/archive.ts --slot kr_close_buy [--date 2026-08-04]
 //
 // 실패해도 로컬 산출물은 이미 디스크에 있으므로, DB 적재 실패는 fallback 큐에 남기고 다음 실행에서 재시도한다.
 import '../_bootstrap';
 
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Slide, StockCard } from '../../lib/engine/slide-schema';
 import { fallbackDir } from '../../lib/engine/fallback-queue';
+import { slidePrefix, uploadRunAssets } from '../../lib/engine/slide-storage';
 import { resolveRunDir, type RunMeta } from './run-context';
-
-const THUMB_BUCKET = 'analysis-slides';
 
 interface SnapshotFileLite {
   ruleVersion: number;
@@ -29,56 +28,30 @@ async function readJson<T>(file: string): Promise<T> {
   return JSON.parse(await readFile(file, 'utf8')) as T;
 }
 
-/**
- * 썸네일만 Storage에 올린다 (원본은 로컬 — 무료 티어 용량 보호).
- * 업로드 실패는 치명적이지 않다: 데스크톱에서는 로컬 원본으로 볼 수 있다.
- */
-async function uploadThumbs(db: SupabaseClient, meta: RunMeta, dir: string): Promise<string | null> {
-  const thumbDir = path.join(dir, 'thumbs');
-  let files: string[];
-  try {
-    files = (await readdir(thumbDir)).filter((f) => f.endsWith('.jpg')).sort();
-  } catch {
-    return null;
-  }
-  if (files.length === 0) return null;
-
-  // 버킷은 최초 1회만 만들어지고, 이미 있으면 에러를 무시한다
-  await db.storage.createBucket(THUMB_BUCKET, { public: false }).catch(() => undefined);
-
-  const prefix = `${meta.userId}/${meta.runDate}/${meta.slotId}`;
-  let uploaded = 0;
-  for (const f of files) {
-    const body = await readFile(path.join(thumbDir, f));
-    const { error } = await db.storage
-      .from(THUMB_BUCKET)
-      .upload(`${prefix}/${f}`, body, { contentType: 'image/jpeg', upsert: true });
-    if (error) {
-      console.warn(`⚠ 썸네일 업로드 실패(${f}): ${error.message}`);
-      break;
-    }
-    uploaded++;
-  }
-  return uploaded > 0 ? prefix : null;
-}
-
 /** 진입가 구간을 최소 통화 단위 정수 쌍으로 (없으면 null) */
 function entryOf(card: StockCard): { low: number | null; high: number | null } {
   if (!card.entryZone) return { low: null, high: null };
   return { low: card.entryZone.low, high: card.entryZone.high };
 }
 
-export async function archiveSlot(
-  db: SupabaseClient,
-  meta: RunMeta,
-  dir: string,
-): Promise<{ reportId: string; signals: number; slides: number }> {
+export interface ArchiveResult {
+  reportId: string;
+  signals: number;
+  slides: number;
+  /** 원본이 전량 업로드됐는가 — 로컬 삭제의 유일한 근거다(불변식 1) */
+  slidesUploaded: boolean;
+}
+
+export async function archiveSlot(db: SupabaseClient, meta: RunMeta, dir: string): Promise<ArchiveResult> {
   const snapshot = await readJson<SnapshotFileLite>(path.join(dir, 'snapshot.json'));
   const analysis = await readJson<AnalysisFileLite>(path.join(dir, 'analysis.json'));
   const slides = await readJson<Slide[]>(path.join(dir, 'slides.json')).catch(() => [] as Slide[]);
   const slidePaths = await readJson<string[]>(path.join(dir, 'slide-paths.json')).catch(() => [] as string[]);
 
-  const thumbPrefix = await uploadThumbs(db, meta, dir);
+  // 원본까지 Storage에 올린다(D19). 실패해도 DB 적재는 계속한다 — 리포트 본문은 이미지 없이도 가치가 있다.
+  const upload = await uploadRunAssets(db, dir, slidePrefix(meta.userId, meta.runDate, meta.slotId));
+  const thumbPrefix = upload.slides > 0 || upload.thumbs > 0 ? upload.prefix : null;
+  const slidesUploaded = slidePaths.length > 0 && upload.slides === slidePaths.length;
 
   const { data: report, error: reportError } = await db
     .from('analysis_reports')
@@ -131,7 +104,7 @@ export async function archiveSlot(
     if (error) throw new Error(`신호 적재 실패: ${error.message}`);
   }
 
-  return { reportId: report.id as string, signals: rows.length, slides: slidePaths.length };
+  return { reportId: report.id as string, signals: rows.length, slides: slidePaths.length, slidesUploaded };
 }
 
 /** DB 적재 실패분 보존 — 다음 실행에서 재시도할 수 있도록 경로만 남긴다 */
@@ -152,7 +125,10 @@ async function main(): Promise<void> {
   const { db, meta, dir } = await resolveRunDir(slot, date);
   try {
     const result = await archiveSlot(db, meta, dir);
-    console.log(`✅ 적재 완료 · 리포트 ${result.reportId} · 신호 ${result.signals}건 · 슬라이드 ${result.slides}장`);
+    console.log(
+      `✅ 적재 완료 · 리포트 ${result.reportId} · 신호 ${result.signals}건 · 슬라이드 ${result.slides}장` +
+        `${result.slidesUploaded ? ' (원본 업로드 완료)' : ' (원본 로컬 보존 — 업로드 미완)'}`,
+    );
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     await queueFallback(dir, reason);
