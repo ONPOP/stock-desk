@@ -11,7 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['lib/**/*.test.ts', 'components/**/*.test.ts', 'app/**/*.test.ts'],
+    // scripts/도 포함한다 — 배치 전용 모듈(http-dispatcher 등)에도 회귀 테스트가 필요하다.
+    // 단 scripts/*는 대개 모듈 로드 시 main()이 돌므로, 테스트 대상은 부작용 없는 모듈로 한정한다.
+    include: ['lib/**/*.test.ts', 'components/**/*.test.ts', 'app/**/*.test.ts', 'scripts/**/*.test.ts'],
     // exFAT 외장 볼륨에서 macOS가 만드는 AppleDouble 부산물(._foo.test.ts)이 테스트로 잡히면 파싱 에러가 난다
     exclude: ['**/node_modules/**', '**/._*'],
   },

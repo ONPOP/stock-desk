@@ -17,7 +17,7 @@
 //
 // lib/이 아니라 scripts/에 두는 이유: lib/engine/telegram.ts처럼 Next 라우트가 import하는 모듈에
 // undici를 끌어들이지 않기 위해서다. 이 디스패처는 tsx로 도는 배치 경로 전용이다.
-import { Agent, fetch as undiciFetch } from 'undici';
+import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from 'undici';
 
 /**
  * HTTP/1.1로 고정한다. h2로도 회복은 되지만, 세션 하나가 모든 요청을 대표하는 구조라
@@ -28,9 +28,36 @@ export const engineAgent = new Agent({
   connect: { timeout: 20_000 },
 });
 
-/** supabase-js의 `global.fetch`에 넣는 용도. 시그니처만 표준 fetch에 맞춘다. */
-export const engineFetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+/**
+ * undici 패키지는 Node **전역** `FormData`를 자기 클래스로 인식하지 못한다(클래스 사본이 다르다).
+ * 인식하지 못하면 본문 추출이 마지막 분기로 떨어져 `String(body)` — 즉 문자열 `"[object FormData]"`를
+ * `text/plain`으로 보낸다. 필드가 통째로 사라지는데 **요청 자체는 200/400으로 성립**하므로 조용히 깨진다.
+ *
+ * 2026-08-10 실측(로컬 에코 서버): 전역 fetch는 multipart 395바이트에 chat_id·media·photo0가 모두 실렸고,
+ * undici fetch는 `text/plain` 17바이트에 아무 필드도 없었다. 텔레그램이 돌려준
+ * `Bad Request: parameter "media" is required`가 이것이다.
+ *
+ * 그래서 여기서 undici 쪽 FormData로 옮겨 담는다. 이 변환을 호출부(lib/engine/telegram.ts)에 두지 않는 이유는
+ * 그 모듈을 Next 라우트가 import하기 때문이다 — undici는 배치 경로 밖으로 나가지 않는다.
+ */
+async function toUndiciBody(body: BodyInit | null | undefined): Promise<unknown> {
+  if (!(body instanceof FormData)) return body;
+  const form = new UndiciFormData();
+  for (const [key, value] of body.entries()) {
+    // Blob·File은 undici가 덕타이핑(Symbol.toStringTag)으로 받아들이므로 그대로 넘긴다.
+    // 파일명은 append의 3번째 인자로만 유지되므로 반드시 다시 실어준다.
+    if (typeof value === 'string') form.append(key, value);
+    else form.append(key, value, value.name);
+  }
+  return form;
+}
+
+/** supabase-js의 `global.fetch`와 텔레그램 발송에 넣는 용도. 시그니처만 표준 fetch에 맞춘다. */
+export const engineFetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
   undiciFetch(input as Parameters<typeof undiciFetch>[0], {
     ...(init as Parameters<typeof undiciFetch>[1]),
+    body: (await toUndiciBody(init?.body)) as Parameters<typeof undiciFetch>[1] extends { body?: infer B }
+      ? B
+      : never,
     dispatcher: engineAgent,
   })) as unknown as typeof fetch;
