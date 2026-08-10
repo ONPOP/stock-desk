@@ -1,0 +1,16 @@
+-- D20 — 안 쓰이는 sim_candles 보조 인덱스 제거.
+--
+-- 2026-08-10 pg_stat_user_indexes 실측:
+--   sim_candles_pkey (ticker, ts)  scan 355,626  11MB   ← 실제 접근 경로
+--   idx_sim_candles_ts (ts)        scan      10  2.9MB  ← 사실상 사용 안 됨
+--
+-- 이 테이블을 읽는 곳은 두 군데뿐이고 둘 다 ticker로 먼저 좁힌다:
+--   app/api/sim/series/route.ts  — .eq('ticker').order('ts')
+--   lib/supabase/queries/sim-trading.ts:closeOn — ticker + ts <= 기준일
+-- 두 쿼리 모두 PK 선두 컬럼이 ticker라 (ts) 단독 인덱스를 타지 않는다.
+--
+-- 데이터(353,180행)는 건드리지 않는다. sim_candles는 sim-ingest.ts 1회 실행 후 동결이며
+-- 증가하지 않고, 모의투자 체결가의 원천이라 행 삭제는 기존 세션을 깨뜨린다.
+--
+-- 되돌리려면: create index idx_sim_candles_ts on public.sim_candles (ts);
+drop index if exists public.idx_sim_candles_ts;

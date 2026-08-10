@@ -36,6 +36,7 @@
 | D16 | 정기 배치 분석 엔진: TypeScript(`lib/engine/`·`scripts/engine/`), LLM은 `claude -p` 헤드리스 전용, 실행은 로컬 launchd, 산출물은 pptx가 아닌 슬라이드 PNG(앱 `/reports` 열람), 저장 루트는 외장 볼륨 지정 가능 |
 | D18 | 텔레그램 슬롯 알림: 봇 토큰은 신규 테이블 `engine_telegram`에 AES-256 암호화 저장, chat id는 `getUpdates` 자동 획득(수동 입력 없음), 알림은 슬롯별 on/off + 켜진 슬롯은 슬라이드 전량을 사진 미디어그룹 발송, 실패 알림은 on/off 무관 항상 발송 |
 | D19 | 슬라이드 원격 저장: 원본을 **WebP q82**로 Supabase Storage(`analysis-slides`)에 적재하고 앱은 서명 URL 302로 서빙(썸네일 폴백). 보존은 원본 `engine_settings.retention_days`(0=무제한) · `market_snapshots` 90일이며 `lib/engine/retention.ts`가 단일 출처. 스키마 변경 없음 |
+| D20 | `sim_candles`는 **행 삭제 금지** — 동결 데이터(증가하지 않음)이고 모의투자 체결가의 원천이라 오래된 캔들을 지우면 기존 세션이 깨진다. 안 쓰이던 `idx_sim_candles_ts`만 드롭(`0020`). DB 증가의 실제 원인은 `news_items`이며 90일 보존을 유지한다 |
 
 **스펙 변경 규칙**: 개발 중 결정 변경이 발생하면 임의 결정하지 말고 사용자 승인 후 `docs/PRD.md`의 Decision Log에 **D9부터 추가 기록**한다.
 
