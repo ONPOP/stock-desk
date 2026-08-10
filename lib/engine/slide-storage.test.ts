@@ -102,7 +102,7 @@ describe('uploadRunAssets', () => {
 
   it('원본과 썸네일을 모두 올린다', async () => {
     const { db, objects } = fakeDb();
-    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot');
+    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot', { backoffMs: 1 });
 
     expect(result).toEqual({ prefix: 'u1/2026-08-08/slot', slides: 3, thumbs: 3 });
     expect([...objects].sort()).toEqual([
@@ -117,14 +117,14 @@ describe('uploadRunAssets', () => {
 
   it('원본이 한 장이라도 실패하면 slides는 0이다 (부분 성공은 실패로 본다)', async () => {
     const { db } = fakeDb({ failUploadAt: '02.webp' });
-    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot');
+    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot', { backoffMs: 1 });
 
     expect(result.slides).toBe(0);
   });
 
   it('간헐적 fetch 실패는 재시도해서 전량 성공시킨다', async () => {
     const { db, objects, attempts } = fakeDb({ transientFailures: 2 });
-    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot');
+    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot', { backoffMs: 1 });
 
     expect(result.slides).toBe(3);
     expect(objects.size).toBe(6);
@@ -134,7 +134,7 @@ describe('uploadRunAssets', () => {
 
   it('재시도해도 계속 실패하면 slides는 0이다', async () => {
     const { db } = fakeDb({ failUploadAt: '02.webp' });
-    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot');
+    const result = await uploadRunAssets(db, dir, 'u1/2026-08-08/slot', { backoffMs: 1 });
 
     expect(result.slides).toBe(0);
   });
@@ -143,7 +143,7 @@ describe('uploadRunAssets', () => {
     const empty = await mkdtemp(path.join(tmpdir(), 'slide-empty-'));
     const { db } = fakeDb();
     try {
-      expect(await uploadRunAssets(db, empty, 'p')).toEqual({ prefix: 'p', slides: 0, thumbs: 0 });
+      expect(await uploadRunAssets(db, empty, 'p', { backoffMs: 1 })).toEqual({ prefix: 'p', slides: 0, thumbs: 0 });
     } finally {
       await rm(empty, { recursive: true, force: true });
     }

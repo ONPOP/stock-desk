@@ -45,12 +45,20 @@ async function listByExt(dir: string, ext: string): Promise<string[]> {
 }
 
 /**
- * Storage 업로드는 간헐적으로 `fetch failed`로 죽는다 — 2026-08-10 실측에서 14장 중 3·10·14번째가
- * 매번 다른 자리에서 터졌고, 바로 다음 시도는 14장 전량 성공했다. 원인 없이 소켓이 끊기는 패턴이라
- * 재시도가 유일한 방어다. 재시도가 없어 그날 슬롯 하나가 통째로 실패했다.
+ * 업로드는 간헐적으로 `fetch failed`로 죽는다. 2026-08-10 원인 규명:
+ * 실제 예외는 `ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC`(TLS 레코드 무결성 실패)이고,
+ * 같은 조건에서 **curl(macOS TLS)도 40회 중 3회 실패**했다 — Node 문제가 아니라 이 기기의
+ * Wi-Fi 경로가 대용량 업로드에서 패킷을 손상시키는 환경 문제다.
+ *
+ * 중요한 건 회복 시간이다: 실패 후 **2초면 회복**한다. 처음엔 200ms·400ms로 재시도했다가
+ * 3회 전부 같은 손상 구간에 갇혀 슬롯이 통째로 실패했다. 백오프는 초 단위여야 한다.
  */
-const UPLOAD_ATTEMPTS = 3;
-const UPLOAD_BACKOFF_MS = 200;
+export const UPLOAD_RETRY = { attempts: 4, backoffMs: 2_000 } as const;
+
+export interface RetryOptions {
+  attempts?: number;
+  backoffMs?: number;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,9 +70,10 @@ async function uploadOne(
   key: string,
   body: Buffer,
   contentType: string,
+  retry: Required<RetryOptions>,
 ): Promise<string | null> {
   let lastReason = '알 수 없음';
-  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= retry.attempts; attempt++) {
     try {
       const { error } = await db.storage.from(SLIDE_BUCKET).upload(key, body, { contentType, upsert: true });
       if (!error) return null;
@@ -72,7 +81,7 @@ async function uploadOne(
     } catch (e) {
       lastReason = e instanceof Error ? e.message : String(e);
     }
-    if (attempt < UPLOAD_ATTEMPTS) await sleep(UPLOAD_BACKOFF_MS * 2 ** (attempt - 1));
+    if (attempt < retry.attempts) await sleep(retry.backoffMs * 2 ** (attempt - 1));
   }
   return lastReason;
 }
@@ -84,13 +93,14 @@ async function uploadAll(
   files: string[],
   prefix: string,
   contentType: string,
+  retry: Required<RetryOptions>,
 ): Promise<number> {
   let uploaded = 0;
   for (const f of files) {
     const body = await readFile(path.join(dir, f));
-    const reason = await uploadOne(db, `${prefix}/${f}`, body, contentType);
+    const reason = await uploadOne(db, `${prefix}/${f}`, body, contentType, retry);
     if (reason !== null) {
-      console.warn(`⚠ 업로드 실패(${f}, ${UPLOAD_ATTEMPTS}회 시도): ${reason}`);
+      console.warn(`⚠ 업로드 실패(${f}, ${retry.attempts}회 시도): ${reason}`);
       break;
     }
     uploaded++;
@@ -102,7 +112,13 @@ async function uploadAll(
  * 슬롯 산출물(원본 + 썸네일)을 Storage에 올린다.
  * 원본이 한 장이라도 실패하면 `slides`를 0으로 돌려준다 — 호출부가 로컬을 지우지 않게 하기 위해서다.
  */
-export async function uploadRunAssets(db: SupabaseClient, dir: string, prefix: string): Promise<UploadResult> {
+export async function uploadRunAssets(
+  db: SupabaseClient,
+  dir: string,
+  prefix: string,
+  retryOptions: RetryOptions = {},
+): Promise<UploadResult> {
+  const retry = { ...UPLOAD_RETRY, ...retryOptions };
   const slideFiles = await listByExt(dir, SLIDE_EXT);
   const thumbDir = path.join(dir, 'thumbs');
   const thumbFiles = await listByExt(thumbDir, THUMB_EXT);
@@ -111,8 +127,8 @@ export async function uploadRunAssets(db: SupabaseClient, dir: string, prefix: s
   // 버킷은 최초 1회만 만들어지고, 이미 있으면 에러를 무시한다
   await db.storage.createBucket(SLIDE_BUCKET, { public: false }).catch(() => undefined);
 
-  const slides = await uploadAll(db, dir, slideFiles, prefix, SLIDE_CONTENT_TYPE);
-  const thumbs = await uploadAll(db, thumbDir, thumbFiles, prefix, THUMB_CONTENT_TYPE);
+  const slides = await uploadAll(db, dir, slideFiles, prefix, SLIDE_CONTENT_TYPE, retry);
+  const thumbs = await uploadAll(db, thumbDir, thumbFiles, prefix, THUMB_CONTENT_TYPE, retry);
 
   return { prefix, slides: slides === slideFiles.length ? slides : 0, thumbs };
 }
