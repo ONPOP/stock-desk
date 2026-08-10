@@ -137,6 +137,7 @@ create table public.analysis_reports (
   market_overview jsonb,
   stock_cards jsonb not null default '[]'::jsonb,
   -- 슬라이드 정의(단일 원천). 렌더러가 이걸 읽어 PNG를 만든다 — pptx 파일은 생성하지 않는다.
+  -- [D19 갱신] 산출 포맷은 PNG가 아니라 WebP q82다(lib/engine/slide-format.ts가 단일 출처).
   slides jsonb not null default '[]'::jsonb,
   -- 저장 루트 기준 '상대경로'. 루트(외장 볼륨 등)가 바뀌어도 재계산 없이 그대로 쓰기 위함.
   slide_paths text[] not null default '{}',
@@ -144,6 +145,9 @@ create table public.analysis_reports (
   storage_state text not null default 'pending'
     check (storage_state in ('pending', 'stored', 'fallback')),
   -- 썸네일만 Supabase Storage에 업로드 (원본은 로컬 — 무료 티어 용량 보호)
+  -- [D19 갱신] 위 설명은 뒤집혔다. 원본(WebP)도 Storage에 올라가고, 이 컬럼은 원본·썸네일이 함께 쓰는
+  -- 프리픽스 `{user_id}/{run_date}/{slot_id}`다 — 이름과 달리 썸네일 전용이 아니다.
+  -- 컬럼명을 바꾸지 않은 이유는 기존 테이블 스키마 변경 금지 규칙(CLAUDE.md) 때문이다.
   thumb_bucket_path text,
   usage_note text,
   constraint uniq_report_per_run unique (user_id, run_date, slot_id)
