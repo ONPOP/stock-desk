@@ -80,6 +80,7 @@
 - 신호 채점: `npx tsx scripts/engine/grade-signals.ts` / 성적 집계: `grade-report.ts --slot <id> --days 7`
 - 만료 정리 미리보기: `npx tsx scripts/engine/purge.ts --dry` (실행은 `--dry` 없이. 슬롯 실행 시 자동으로 마지막에 돈다)
 - 과거 리포트 원본 backfill: `npx tsx scripts/engine/backfill-slides.ts --dry` (로컬 `html/`에서 재캡처 → WebP 업로드)
+- 로컬 원본 정리 미리보기: `npx tsx scripts/engine/cleanup-local.ts --dry` (슬롯 실행 시 알림 뒤에 자동으로 돈다)
 - **설정은 앱에서**: `/reports` → [설정] 탭 (슬롯 시각·선정 규칙·관찰 규칙·테마·저장/예산). SQL 직접 수정 불필요.
 - 종목 단위 플래그: `/stocks` 카드의 📢 항상 브리핑(`always_brief`) · ⌖ 관찰 고정(`radar_pin`) 토글
 - 슬롯 시각 변경 후에는 [스케줄 반영] 버튼(또는 `install-schedule`)을 눌러야 launchd에 반영된다
@@ -96,6 +97,9 @@
 - Supabase 적재 실패분은 `data/fallback/`에 남고 다음 실행에서 재시도한다.
 - 시세 부분 실패는 정상 동작이다(해당 종목만 "데이터 미수집" 처리).
 - 지정 저장 볼륨이 연결돼 있지 않으면 기본 경로로 저장되고 `storage_state='fallback'`으로 표시된다.
+- **로컬 슬라이드는 알림 직후 지워진다(D19 ⑧).** 그래서 지난 실행에 `notify.ts`를 다시 돌리면 파일이
+  없어 실패한다 — 재발송이 필요하면 `backfill-slides.ts --force`로 `html/`에서 이미지를 먼저 되살려라.
+  `html/`과 `*.json`은 삭제 대상이 아니다.
 - 슬라이드 저장 루트는 `SLIDE_STORAGE_ROOT`(.env.local → 패키징 시 `app.env`)로 고정한다. 비워두면
   배치는 리포지토리, 데스크톱 앱은 앱 번들 안을 가리켜 앱에서 슬라이드를 못 읽는다.
   단 DB(`engine_settings.slide_storage_root`)가 env보다 우선하므로, 앱 [설정]에서 지정한 값이 최종이다.

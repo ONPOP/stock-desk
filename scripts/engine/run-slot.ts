@@ -149,11 +149,17 @@ async function main(): Promise<void> {
   const step5 = await tsx('notify.ts', ['--slot', slotId, '--date', runDate]);
   if (!step5.ok) await fail('알림', step5.reason ?? '실패');
 
-  // [6] 만료 정리 (D19) — 알림까지 끝난 뒤의 뒷정리라 실패해도 슬롯을 실패로 만들지 않는다.
+  // [6] 로컬 원본 정리 (D19 ⑧) — **반드시 알림 다음이다.** 텔레그램이 로컬 파일을 읽는다(불변식 9).
+  //     삭제 직전에 원격 객체를 장별로 다시 대조하므로(불변식 1), 업로드가 덜 됐으면 스스로 건너뛴다.
+  //     뒷정리라 실패해도 슬롯을 실패로 만들지 않는다.
+  const step6 = await tsx('cleanup-local.ts', ['--slot', slotId, '--date', runDate]);
+  if (!step6.ok) console.warn(`⚠ 로컬 정리 실패(슬롯은 성공 처리): ${step6.reason ?? '실패'}`);
+
+  // [7] 만료 정리 (D19) — 알림까지 끝난 뒤의 뒷정리라 실패해도 슬롯을 실패로 만들지 않는다.
   //     정리는 멱등이므로 다음 실행에서 다시 시도된다.
   //     --include-news: news_items는 user_id가 없는 공용 테이블이라 전역 삭제다(사용자 승인 2026-08-10).
-  const step6 = await tsx('purge.ts', ['--include-news']);
-  if (!step6.ok) console.warn(`⚠ 정리 실패(슬롯은 성공 처리): ${step6.reason ?? '실패'}`);
+  const step7 = await tsx('purge.ts', ['--include-news']);
+  if (!step7.ok) console.warn(`⚠ 정리 실패(슬롯은 성공 처리): ${step7.reason ?? '실패'}`);
 
   console.log(`\n✅ 슬롯 ${slotId} 완료`);
 }
