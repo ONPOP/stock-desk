@@ -6,15 +6,16 @@
 // 한 곳에서 타입 안전하게 다루기 위함. run-slot.sh는 launchd 진입점(로그 리다이렉트)일 뿐이다.
 import '../_bootstrap';
 
-import { spawn } from 'node:child_process';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { dateInTz, KST_TZ } from '../../lib/utils/date';
 import { dataDir } from '../../lib/engine/data-dir';
+import { detectClaudeAuthFailure } from '../../lib/engine/claude-auth';
 import { sendSlotError, setTelegramFetch } from '../../lib/engine/telegram';
 import { resolveTelegramConfigForUser } from '../../lib/engine/telegram-settings';
 import { adminClient, loadSettings, resolveUserId } from './run-context';
 import { engineFetch } from './http-dispatcher';
+import { runStep, type StepResult } from './spawn-step';
 
 // 실패 알림까지 내장 fetch의 죽은 세션에 걸리면 "왜 죽었는지"조차 못 받는다
 setTelegramFetch(engineFetch);
@@ -35,23 +36,8 @@ signal_rules 개선안을 \`ruleProposals\` 배열에 항목별로 제안만 하
 개선안을 \`marketOverview.summary\`에 넣지 마라 — 시장 개요 슬라이드가 넘쳐 잘린다.
 개선안은 별도 슬라이드로 렌더된다.`;
 
-interface StepResult {
-  ok: boolean;
-  reason?: string;
-}
-
-function run(cmd: string, args: string[], label: string): Promise<StepResult> {
-  return new Promise((resolve) => {
-    console.log(`\n▶ ${label}\n  $ ${cmd} ${args.map((a) => (a.includes(' ') ? '"…"' : a)).join(' ')}`);
-    const child = spawn(cmd, args, { stdio: 'inherit', env: process.env });
-    child.on('error', (err) => resolve({ ok: false, reason: `${label} 실행 불가: ${err.message}` }));
-    child.on('close', (code) =>
-      resolve(code === 0 ? { ok: true } : { ok: false, reason: `${label} 실패 (exit ${code})` }),
-    );
-  });
-}
-
-const tsx = (script: string, args: string[]) => run('npx', ['tsx', `scripts/engine/${script}`, ...args], script);
+const tsx = (script: string, args: string[]): Promise<StepResult> =>
+  runStep('npx', ['tsx', `scripts/engine/${script}`, ...args], script);
 
 async function buildPrompt(dir: string, slotId: string, slotType: SlotType, runDate: string): Promise<string> {
   const template = await readFile(PROMPT_FILE, 'utf8');
@@ -128,10 +114,20 @@ async function main(): Promise<void> {
   const analysisPath = path.join(dir, 'analysis.json');
 
   // [2] Claude 헤드리스 분석 — 필요한 도구만 허용한다 (--dangerously-skip-permissions 사용 금지)
+  //     capture를 켜는 이유: exit 코드만으로는 "로그인 만료"와 "프롬프트 오류"가 구분되지 않는다.
+  //     2026-08-14~19에 OAuth 세션이 만료돼 전 슬롯이 6일간 죽었는데 알림은 exit 1만 알려줬다.
   if (!skipClaude) {
     const prompt = await buildPrompt(dir, slotId, slotType, runDate);
-    const step2 = await run('claude', ['-p', prompt, '--allowedTools', 'Read,Write,WebSearch,WebFetch'], 'claude 분석');
-    if (!step2.ok) await fail('분석', step2.reason ?? '실패');
+    const step2 = await runStep(
+      'claude',
+      ['-p', prompt, '--allowedTools', 'Read,Write,WebSearch,WebFetch'],
+      'claude 분석',
+      { capture: true },
+    );
+    if (!step2.ok) {
+      const authHint = detectClaudeAuthFailure(step2.output ?? '');
+      await fail('분석', authHint ? `${step2.reason ?? '실패'} — ${authHint}` : (step2.reason ?? '실패'));
+    }
   }
   if (!(await fileExists(analysisPath))) {
     await fail('분석', `analysis.json이 생성되지 않았습니다: ${analysisPath}`);

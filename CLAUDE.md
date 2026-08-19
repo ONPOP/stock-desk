@@ -89,6 +89,10 @@
 
 ### 장애 대응
 - 슬롯 실패 시 텔레그램 에러 알림이 발송된다. 로그: `data/logs/{date}/{slot}.log`
+- 알림에 **"Claude 로그인이 만료됐습니다"**가 오면 터미널에서 `claude` 실행 후 `/login` 하면 끝이다.
+  `claude -p`의 OAuth 세션이 만료되면 [2] 분석 단계에서만 죽고 수집은 정상이라, 재로그인 전까지
+  모든 슬롯이 리포트 없이 실패한다(2026-08-14~19에 6일간 발생). 판별은 `lib/engine/claude-auth.ts`,
+  출력 포착은 `scripts/engine/spawn-step.ts`의 `capture` 옵션이 한다.
 - `TypeError: fetch failed`가 연속으로 나면 **백오프를 늘리지 마라.** 이 기기의 Wi-Fi 경로가 대용량
   요청에서 TLS 레코드를 손상시키고(환경 문제, 일시적), Node 내장 fetch가 그때 죽은 HTTP/2 세션을
   프로세스 끝까지 붙들어 남은 요청이 전부 죽는다(107초 대기에도 회복 안 됨). 배치는
