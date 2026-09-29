@@ -78,6 +78,22 @@ export interface WatchlistItem {
   radarPin: boolean;
 }
 
+/** 사용자 종목 등급 — 조사·분석 후 투자성으로 매기는 수동 등급(A 최상위). 엔진 ScoreGrade와 별개 */
+export type StockGrade = 'A' | 'B' | 'C' | 'D';
+
+/** /stocks 등급 필터 칩 — 'none'은 미분류(등급 미지정) */
+export type GradeFilter = StockGrade | 'none';
+
+/** 종목 단위 등급 기록 — 탭과 무관(user_id, stock_id당 1건) */
+export interface UserStockGrade {
+  stockId: string;
+  grade: StockGrade;
+  /** 한 줄 사유(선택) */
+  reason: string | null;
+  /** 지정·수정 시각(UTC ISO) */
+  gradedAt: string;
+}
+
 /** 시장 위젯(F11) 지수/환율/금리 — 표시값(금액 아님) */
 export interface MarketIndex {
   key: string;
