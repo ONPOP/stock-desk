@@ -2,6 +2,8 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // tsconfig의 jsx: preserve(Next 전용)를 그대로 따르면 .tsx 컴포넌트를 테스트에서 불러올 수 없다 — 테스트에서만 변환한다
+  oxc: { jsx: { runtime: 'automatic' } },
   resolve: {
     alias: {
       // 'server-only'는 RSC 외 환경에서 import 시 throw → 테스트에서는 빈 스텁으로 대체

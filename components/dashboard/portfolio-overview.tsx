@@ -3,7 +3,7 @@
 // 대시보드 자산현황 + 포트폴리오 카드 (V2 · D11) — 전체자산·예수금·매입(국내/해외)·평가·평가손익.
 // 예수금 = 입출금(cash_ledger) + 매매 자동 연동(수수료 포함), 클라이언트에서 computeCashBalance로 재계산.
 // 보유 종목 시세를 각각 폴링(PricePoller)해 summarizePortfolio·summarizeAssets로 통합(통화 하이브리드).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Wallet, ArrowDownUp } from 'lucide-react';
 import {
   PieChart,
@@ -20,12 +20,12 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CashManager } from '@/components/cash/cash-manager';
-import { useQuote } from '@/lib/hooks/use-quote';
+import { PricePoller } from '@/components/stocks/price-poller';
 import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
 import { summarizePortfolio, evalHolding } from '@/lib/utils/portfolio';
 import { computeCashBalance, summarizeAssets } from '@/lib/utils/cash';
 import { formatMoney, formatCompactMoney } from '@/lib/utils/money';
-import type { CashTransaction, Currency, Market, RealHolding, RealizedTrade, RealTrade } from '@/types';
+import type { CashTransaction, Currency, RealHolding, RealizedTrade, RealTrade } from '@/types';
 
 const DONUT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#94a3b8'];
 const UP = '#e0364f';
@@ -45,25 +45,6 @@ function signedKrw(n: number): string {
 }
 function toKrw(minor: number, currency: Currency, usdKrw: number): number {
   return currency === 'USD' ? Math.round((minor / 100) * usdKrw) : minor;
-}
-
-/** 보유 1종목 시세를 폴링해 부모에 보고만 하는 무표시 컴포넌트 */
-function PricePoller({
-  stockId,
-  ticker,
-  market,
-  onPrice,
-}: {
-  stockId: string;
-  ticker: string;
-  market: Market;
-  onPrice: (stockId: string, price: number) => void;
-}) {
-  const { quote } = useQuote(ticker, market, { intervalMs: 15_000 });
-  useEffect(() => {
-    if (quote) onPrice(stockId, quote.price);
-  }, [quote, stockId, onPrice]);
-  return null;
 }
 
 function Metric({ label, value, className }: { label: string; value: string; className?: string }) {

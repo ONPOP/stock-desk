@@ -3,6 +3,7 @@
 // 종목 검색·등록 (F3) — 디바운스 검색, 시장 뱃지, 중복 등록 방지.
 // [재설계] 검색 인풋·결과 드롭다운 비주얼 + 실제 로고. [보존] 디바운스 fetch·abort·중복방지·StockSearchProps.
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -81,8 +82,11 @@ export function StockSearch({ existingKeys, onAdd }: StockSearchProps) {
           {results.map((r) => {
             const registered = existingKeys.has(keyOf(r.ticker, r.market));
             return (
-              <li key={keyOf(r.ticker, r.market)} className="flex items-center justify-between gap-3 p-3">
-                <div className="flex min-w-0 items-center gap-2.5">
+              <li key={keyOf(r.ticker, r.market)} className="flex items-center justify-between gap-3 p-3 hover:bg-muted/50">
+                <Link
+                  href={`/stocks/${r.ticker}?market=${r.market}`}
+                  className="flex min-w-0 flex-1 items-center gap-2.5"
+                >
                   <CompanyLogo ticker={r.ticker} name={r.name_kr ?? r.name_en} size={30} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -91,7 +95,7 @@ export function StockSearch({ existingKeys, onAdd }: StockSearchProps) {
                     </div>
                     <p className="font-mono text-xs text-muted-foreground">{r.ticker}</p>
                   </div>
-                </div>
+                </Link>
                 <Button
                   size="sm"
                   variant={registered ? 'secondary' : 'default'}

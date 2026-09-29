@@ -16,7 +16,9 @@ import { useQuote } from '@/lib/hooks/use-quote';
 import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { formatMoney } from '@/lib/utils/money';
 import { evalHolding } from '@/lib/utils/portfolio';
-import type { RealHolding, WatchlistItem } from '@/types';
+import { cn } from '@/lib/utils';
+import type { RealHolding, UserStockGrade, WatchlistItem } from '@/types';
+import { GRADE_TONE } from './grade-style';
 
 interface WatchlistCardProps {
   /** dnd 정렬용 유일 id — 묶음 접두어로 즐겨찾기/시장 중복 표시를 구분(`fav:<stockId>` 등) */
@@ -28,6 +30,9 @@ interface WatchlistCardProps {
   /** 분석 엔진(D16) 플래그 토글 — 항상 브리핑 / 관찰 고정 */
   onToggleEngineFlag: (stockId: string, flag: 'always_brief' | 'radar_pin', value: boolean) => void;
   onPrice: (stockId: string, priceMinor: number) => void;
+  /** 사용자 등급(D22) — 없으면 미분류 */
+  userGrade: UserStockGrade | null;
+  onEditGrade: (stockId: string) => void;
 }
 
 function changeColor(change: number): string {
@@ -53,6 +58,8 @@ export function WatchlistCard({
   onToggleFavorite,
   onToggleEngineFlag,
   onPrice,
+  userGrade,
+  onEditGrade,
 }: WatchlistCardProps) {
   const [viewportRef, visible] = useInViewport<HTMLDivElement>();
   const { quote, error, loading } = useQuote(item.ticker, item.market, { enabled: visible });
@@ -92,51 +99,7 @@ export function WatchlistCard({
       style={style}
       className="relative gap-0 p-4 ring-border/70 transition-shadow hover:shadow-md"
     >
-      <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5">
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className={item.alwaysBrief ? 'text-emerald-500' : 'text-muted-foreground/50'}
-          aria-label={item.alwaysBrief ? '항상 브리핑 해제' : '항상 브리핑에 포함'}
-          aria-pressed={item.alwaysBrief}
-          title="분석 리포트에 항상 포함"
-          onClick={() => onToggleEngineFlag(item.stock_id, 'always_brief', !item.alwaysBrief)}
-        >
-          <Megaphone className={item.alwaysBrief ? 'fill-current' : ''} />
-        </Button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className={item.radarPin ? 'text-sky-500' : 'text-muted-foreground/50'}
-          aria-label={item.radarPin ? '관찰 고정 해제' : '눌림목 관찰에 고정'}
-          aria-pressed={item.radarPin}
-          title="눌림목 관찰 표에 고정"
-          onClick={() => onToggleEngineFlag(item.stock_id, 'radar_pin', !item.radarPin)}
-        >
-          <Crosshair />
-        </Button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className={item.isFavorite ? 'text-amber-500' : 'text-muted-foreground'}
-          aria-label={item.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-          aria-pressed={item.isFavorite}
-          onClick={() => onToggleFavorite(item.stock_id, !item.isFavorite)}
-        >
-          <Star className={item.isFavorite ? 'fill-current' : ''} />
-        </Button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className="text-muted-foreground"
-          aria-label={`${item.name_kr ?? item.ticker} 삭제`}
-          onClick={() => onRemove(item.stock_id)}
-        >
-          <X />
-        </Button>
-      </div>
-
-      <div className="flex items-start gap-1.5 pr-14">
+      <div className="flex items-start gap-1.5">
         <button
           type="button"
           className="mt-0.5 cursor-grab touch-none text-muted-foreground/60 hover:text-muted-foreground active:cursor-grabbing"
@@ -150,11 +113,11 @@ export function WatchlistCard({
           <div className="flex items-center gap-2.5">
             <CompanyLogo ticker={item.ticker} name={item.name_kr ?? item.name_en} />
             <div className="min-w-0">
+              <p className="truncate font-semibold">{item.name_kr ?? item.name_en ?? item.ticker}</p>
               <div className="flex items-center gap-1.5">
-                <span className="truncate font-semibold">{item.name_kr ?? item.name_en ?? item.ticker}</span>
+                <span className="font-mono text-[11.5px] text-muted-foreground">{item.ticker}</span>
                 <Badge variant="secondary" className="shrink-0">{item.market}</Badge>
               </div>
-              <p className="font-mono text-[11.5px] text-muted-foreground">{item.ticker}</p>
             </div>
           </div>
 
@@ -184,6 +147,68 @@ export function WatchlistCard({
             </div>
           )}
         </Link>
+        {/* 아이콘을 절대배치하면 좁은 카드에서 종목명·시장 배지와 겹친다 — 줄 안에 자리를 잡게 둔다 */}
+        <div className="-mt-1 -mr-1.5 flex shrink-0 items-center gap-0.5">
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className={item.isFavorite ? 'text-amber-500' : 'text-muted-foreground'}
+            aria-label={item.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+            aria-pressed={item.isFavorite}
+            onClick={() => onToggleFavorite(item.stock_id, !item.isFavorite)}
+          >
+            <Star className={item.isFavorite ? 'fill-current' : ''} />
+          </Button>
+            <Button
+            size="icon-xs"
+            variant="ghost"
+            className="text-muted-foreground"
+            aria-label={`${item.name_kr ?? item.ticker} 삭제`}
+            onClick={() => onRemove(item.stock_id)}
+          >
+            <X />
+          </Button>
+        </div>
+      </div>
+
+      {/* 분석 설정(엔진 플래그)과 등급은 하단 줄에 모은다 */}
+      <div className="mt-auto -mr-1.5 flex items-center justify-end gap-0.5 pt-2">
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className={item.alwaysBrief ? 'text-emerald-500' : 'text-muted-foreground/50'}
+            aria-label={item.alwaysBrief ? '항상 브리핑 해제' : '항상 브리핑에 포함'}
+            aria-pressed={item.alwaysBrief}
+            title="분석 리포트에 항상 포함"
+            onClick={() => onToggleEngineFlag(item.stock_id, 'always_brief', !item.alwaysBrief)}
+          >
+            <Megaphone className={item.alwaysBrief ? 'fill-current' : ''} />
+          </Button>
+            <Button
+            size="icon-xs"
+            variant="ghost"
+            className={item.radarPin ? 'text-sky-500' : 'text-muted-foreground/50'}
+            aria-label={item.radarPin ? '관찰 고정 해제' : '눌림목 관찰에 고정'}
+            aria-pressed={item.radarPin}
+            title="눌림목 관찰 표에 고정"
+            onClick={() => onToggleEngineFlag(item.stock_id, 'radar_pin', !item.radarPin)}
+          >
+            <Crosshair />
+          </Button>
+        <button
+          type="button"
+          onClick={() => onEditGrade(item.stock_id)}
+          aria-label={userGrade ? `등급 ${userGrade.grade}${userGrade.reason ? ` — ${userGrade.reason}` : ''}, 변경` : '등급 지정'}
+          title={userGrade ? (userGrade.reason ?? undefined) : '등급 지정'}
+          className={cn(
+            'ml-1 mr-1.5 inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-bold ring-1',
+            userGrade
+              ? GRADE_TONE[userGrade.grade]
+              : 'font-medium text-muted-foreground/60 ring-border hover:bg-muted hover:text-muted-foreground',
+          )}
+        >
+          {userGrade?.grade ?? '등급'}
+        </button>
       </div>
     </Card>
   );

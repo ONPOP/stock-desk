@@ -1,18 +1,6 @@
-// 기간별 수익률 (V2) — RSC에서 매매기록 로드 후 클라이언트 뷰에 위임(실현손익 집계·차트).
-import { requireUser } from '@/lib/supabase/server';
-import { listAllTrades } from '@/lib/supabase/queries/real-trades';
-import { PerformanceView } from '@/components/performance/performance-view';
+// 기간별 수익률은 투자 기록 탭의 [수익 분석]으로 옮겨졌다(D21). 기존 링크·북마크 호환용 리다이렉트.
+import { redirect } from 'next/navigation';
 
-export default async function PerformancePage() {
-  const { supabase, user } = await requireUser();
-  const trades = await listAllTrades(supabase, user.id);
-  return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">기간별 수익률</h1>
-        <p className="text-sm text-muted-foreground">실현손익 기준 · 연도·월·기간별 집계(원화 환산 통합)</p>
-      </div>
-      <PerformanceView trades={trades} />
-    </div>
-  );
+export default function PerformancePage() {
+  redirect('/journal?tab=analysis');
 }

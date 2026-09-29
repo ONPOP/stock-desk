@@ -43,6 +43,8 @@ export interface Candle {
 }
 
 export interface StockSearchResult {
+  /** stocks.id — 매매 기록 저장에 쓴다 */
+  id?: string;
   ticker: string;
   name_kr: string | null;
   name_en: string | null;
@@ -74,6 +76,22 @@ export interface WatchlistItem {
   alwaysBrief: boolean;
   /** 분석 엔진(D16): 조건과 무관하게 눌림목 관찰 표에 항상 표시 */
   radarPin: boolean;
+}
+
+/** 사용자 종목 등급 — 조사·분석 후 투자성으로 매기는 수동 등급(A 최상위). 엔진 ScoreGrade와 별개 */
+export type StockGrade = 'A' | 'B' | 'C' | 'D';
+
+/** /stocks 등급 필터 칩 — 'none'은 미분류(등급 미지정) */
+export type GradeFilter = StockGrade | 'none';
+
+/** 종목 단위 등급 기록 — 탭과 무관(user_id, stock_id당 1건) */
+export interface UserStockGrade {
+  stockId: string;
+  grade: StockGrade;
+  /** 한 줄 사유(선택) */
+  reason: string | null;
+  /** 지정·수정 시각(UTC ISO) */
+  gradedAt: string;
 }
 
 /** 시장 위젯(F11) 지수/환율/금리 — 표시값(금액 아님) */
@@ -202,16 +220,6 @@ export interface Note {
   attachedAnalysisId: string | null;
   attachedTradeId: string | null;
   createdAt: string;
-}
-
-// ───────────────────────── 종목 비교 (V2 F16) ─────────────────────────
-
-export interface CompareItem {
-  stockId: string;
-  ticker: string;
-  name: string;
-  currency: Currency;
-  metrics: StockMetrics | null;
 }
 
 // ───────────────────────── 대시보드 풀구성 (V2) ─────────────────────────
@@ -602,3 +610,95 @@ export type RealtimeServerMsg =
   | { type: 'tick'; data: RealtimeTick }
   | { type: 'orderbook'; data: RealtimeOrderbook }
   | { type: 'status'; connected: boolean; mode: 'live' | 'mock'; subscribed: string[] };
+
+// ───────────────────────── 투자 기록: 투자 규칙 · 목표 수익률 (D21) ─────────────────────────
+
+/** 대시보드에 고정 표시하는 나만의 투자 규칙 */
+export interface InvestmentRule {
+  id: string;
+  content: string;
+  sortOrder: number;
+}
+
+export type GoalKind = 'monthly' | 'yearly';
+
+/** 목표 수익률 설정 1건. 월 목표는 effectiveMonth부터 복리 경로, 연 목표는 해당 연도 전체 */
+export interface ReturnGoal {
+  id: string;
+  kind: GoalKind;
+  /** 목표 수익률(%) — 10진 문자열(부동소수점 회피, 예: "3.5") */
+  ratePct: string;
+  /** 적용 시작 월 YYYY-MM (연 목표는 YYYY-01) */
+  effectiveMonth: string;
+  createdAt: string;
+}
+
+/** 월별 시작 금액 기록. 금액은 원화 환산 원 단위 정수 */
+export interface GoalMonthRecord {
+  /** YYYY-MM */
+  month: string;
+  /** 월초 예수금 + 보유 매입원가(자동) */
+  baseStart: number;
+  /** 사용자가 고친 월초 금액(null이면 baseStart) */
+  startOverride: number | null;
+  /** 월중 입금 − 출금 */
+  netFlow: number;
+  /** 월 실현손익 */
+  realized: number;
+  /** 확정(지난 달) 여부 — 확정된 달은 재계산하지 않는다 */
+  closed: boolean;
+}
+
+/** 월 목표 평가 결과(원 단위 정수, 비율은 소수 2자리 number) */
+export interface MonthGoalProgress {
+  month: string;
+  record: GoalMonthRecord;
+  /** 시작 금액 = (override ?? base) + netFlow */
+  startAmount: number;
+  goal: {
+    goalId: string;
+    /** 설정한 월 목표 수익률(%) */
+    ratePct: string;
+    /** 경로 기준 이번 달에 필요한 수익률(%) — 지난 달 미달분이 반영된다 */
+    requiredRatePct: number;
+    /** 이번 달 목표 수익 금액 */
+    requiredProfit: number;
+    /** 목표 금액 = 시작 금액 + 목표 수익 */
+    targetAmount: number;
+    /** 달성률(%) = 실현손익 / 목표 수익 */
+    achievementPct: number;
+    /** 남은 금액(음수 없음) */
+    remaining: number;
+    achieved: boolean;
+  } | null;
+  /** 실현 수익률(%) = 실현손익 / 시작 금액 */
+  realizedRatePct: number;
+}
+
+export interface YearGoalProgress {
+  year: string;
+  startAmount: number;
+  realized: number;
+  realizedRatePct: number;
+  goal: {
+    goalId: string;
+    ratePct: string;
+    targetProfit: number;
+    targetAmount: number;
+    achievementPct: number;
+    remaining: number;
+    achieved: boolean;
+  } | null;
+}
+
+/** 목표 탭·대시보드용 목표 현황 */
+export interface GoalOverview {
+  goals: ReturnGoal[];
+  /** 오름차순(첫 활동 월 ~ 이번 달) */
+  months: MonthGoalProgress[];
+  years: YearGoalProgress[];
+  /** 이번 달 YYYY-MM (KST) */
+  currentMonth: string;
+  /** 달러 거래가 있는데 환율을 못 받아 원화 환산이 불완전함 */
+  fxPending: boolean;
+}
