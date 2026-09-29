@@ -33,3 +33,20 @@ export function toggleGradeFilter(selected: ReadonlySet<GradeFilter>, f: GradeFi
   else next.add(f);
   return next;
 }
+
+/**
+ * 저장·해제 실패 시 해당 종목만 되돌린다. 맵 전체 스냅샷을 복원하면 그사이 끝난 다른 종목 저장까지 지워지므로,
+ * 현재 값이 내가 넣은 낙관적 값일 때만 이전 값으로 복원한다(다른 저장이 덮었으면 그대로 둔다).
+ */
+export function rollbackGrade(
+  map: Record<string, UserStockGrade>,
+  stockId: string,
+  optimistic: UserStockGrade | undefined,
+  previous: UserStockGrade | undefined,
+): Record<string, UserStockGrade> {
+  if (map[stockId] !== optimistic) return map;
+  const next = { ...map };
+  if (previous) next[stockId] = previous;
+  else delete next[stockId];
+  return next;
+}

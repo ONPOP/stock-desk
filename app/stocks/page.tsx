@@ -18,7 +18,11 @@ export default async function StocksPage({
   const [initial, trades, grades] = await Promise.all([
     listWatchlist(supabase, user.id, activeId),
     listAllTrades(supabase, user.id),
-    listStockGrades(supabase, user.id),
+    // 등급은 부가 기능 — 조회가 실패해도(예: 0022 미적용) 내 종목 화면 전체를 에러로 넘기지 않는다
+    listStockGrades(supabase, user.id).catch((e: unknown) => {
+      console.warn(`⚠ 종목 등급 조회 실패 — 등급 없이 표시: ${e instanceof Error ? e.message : String(e)}`);
+      return {};
+    }),
   ]);
   return (
     <div className="space-y-6 p-6">

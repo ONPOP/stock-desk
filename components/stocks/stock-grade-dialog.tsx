@@ -43,7 +43,7 @@ export function StockGradeDialog({ target, onClose, onSave, onClear }: StockGrad
   useEffect(() => {
     if (!target) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !submittingRef.current) onClose(); // 저장 중에는 닫지 않는다(dismiss 참고)
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -51,6 +51,11 @@ export function StockGradeDialog({ target, onClose, onSave, onClear }: StockGrad
 
   if (!target) return null;
   const t = target;
+
+  // 저장 중에 닫히면 끝난 요청의 onClose가 그다음 연 모달을 닫고 중복 제출 가드를 풀어 버린다 — 응답까지 닫지 않는다
+  function dismiss() {
+    if (!submittingRef.current) onClose();
+  }
 
   async function run(action: () => Promise<void>) {
     if (submittingRef.current) return;
@@ -70,7 +75,7 @@ export function StockGradeDialog({ target, onClose, onSave, onClear }: StockGrad
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
+      onClick={dismiss}
       role="presentation"
     >
       <div

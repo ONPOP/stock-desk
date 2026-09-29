@@ -27,7 +27,7 @@ import { GradeFilterChips } from './grade-filter-chips';
 import { StockGradeDialog, type GradeTarget } from './stock-grade-dialog';
 import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
 import { computeHoldings, computeRealized, evalHolding, summarizePortfolio } from '@/lib/utils/portfolio';
-import { countByGrade, filterByGrade, toggleGradeFilter } from '@/lib/utils/stock-grade';
+import { countByGrade, filterByGrade, rollbackGrade, toggleGradeFilter } from '@/lib/utils/stock-grade';
 import type {
   GradeFilter,
   Market,
@@ -248,8 +248,9 @@ export function WatchlistManager({
 
   /** 실패 시 throw — 모달이 닫히지 않고 남아 재시도할 수 있다 */
   async function saveGrade(stockId: string, grade: StockGrade, reason: string | null) {
-    const snapshot = grades;
-    setGrades((m) => ({ ...m, [stockId]: { stockId, grade, reason, gradedAt: new Date().toISOString() } }));
+    const previous = grades[stockId];
+    const optimistic: UserStockGrade = { stockId, grade, reason, gradedAt: new Date().toISOString() };
+    setGrades((m) => ({ ...m, [stockId]: optimistic }));
     try {
       const res = await fetch('/api/stock-grades', {
         method: 'PUT',
@@ -261,14 +262,14 @@ export function WatchlistManager({
       setGrades((m) => ({ ...m, [stockId]: data.grade as UserStockGrade }));
       toast.success(`${grade}등급으로 지정했습니다.`);
     } catch (e) {
-      setGrades(snapshot);
+      setGrades((m) => rollbackGrade(m, stockId, optimistic, previous));
       toast.error((e as Error).message);
       throw e;
     }
   }
 
   async function clearGrade(stockId: string) {
-    const snapshot = grades;
+    const previous = grades[stockId];
     setGrades((m) => {
       const n = { ...m };
       delete n[stockId];
@@ -279,7 +280,7 @@ export function WatchlistManager({
       if (!res.ok) throw new Error();
       toast.success('등급을 해제했습니다.');
     } catch (e) {
-      setGrades(snapshot);
+      setGrades((m) => rollbackGrade(m, stockId, undefined, previous));
       toast.error('등급 해제에 실패했습니다.');
       throw e;
     }

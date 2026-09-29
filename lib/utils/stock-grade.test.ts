@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { countByGrade, filterByGrade, toggleGradeFilter } from './stock-grade';
+import { countByGrade, filterByGrade, rollbackGrade, toggleGradeFilter } from './stock-grade';
 import type { GradeFilter, UserStockGrade, WatchlistItem } from '@/types';
 
 function item(stockId: string): WatchlistItem {
@@ -61,5 +61,31 @@ describe('toggleGradeFilter', () => {
     expect([...added].sort()).toEqual(['A', 'B']);
     expect([...toggleGradeFilter(added, 'A')]).toEqual(['B']);
     expect([...base]).toEqual(['A']);
+  });
+});
+
+describe('rollbackGrade', () => {
+  it('낙관적 값이 그대로면 이전 값으로 되돌리고 다른 종목은 건드리지 않는다', () => {
+    const optimistic = g('a1', 'D');
+    const map = { ...grades, a1: optimistic };
+    const out = rollbackGrade(map, 'a1', optimistic, grades.a1);
+    expect(out.a1).toBe(grades.a1);
+    expect(out.b1).toBe(grades.b1);
+  });
+  it('이전 값이 없으면(신규 지정 실패) 키를 지운다', () => {
+    const optimistic = g('n1', 'A');
+    const out = rollbackGrade({ ...grades, n1: optimistic }, 'n1', optimistic, undefined);
+    expect('n1' in out).toBe(false);
+  });
+  it('해제 실패는 지워진 상태(undefined)에서 이전 값으로 복원', () => {
+    const { a1: _removed, ...cleared } = grades;
+    void _removed;
+    expect(rollbackGrade(cleared, 'a1', undefined, grades.a1).a1).toBe(grades.a1);
+  });
+  it('그사이 다른 저장이 값을 바꿨으면 되돌리지 않는다', () => {
+    const optimistic = g('a1', 'D');
+    const newer = g('a1', 'B');
+    const map = { ...grades, a1: newer };
+    expect(rollbackGrade(map, 'a1', optimistic, grades.a1)).toBe(map);
   });
 });
