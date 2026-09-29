@@ -100,18 +100,6 @@ export function WatchlistCard({
       className="relative gap-0 p-4 ring-border/70 transition-shadow hover:shadow-md"
     >
       <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5">
-        <button
-          type="button"
-          onClick={() => onEditGrade(item.stock_id)}
-          aria-label={userGrade ? `등급 ${userGrade.grade}, 변경` : '등급 지정'}
-          title={userGrade ? (userGrade.reason ?? undefined) : '등급 지정'}
-          className={cn(
-            'mr-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[11px] font-bold ring-1',
-            userGrade ? GRADE_TONE[userGrade.grade] : 'text-muted-foreground/50 ring-border hover:bg-muted',
-          )}
-        >
-          {userGrade?.grade ?? '–'}
-        </button>
         <Button
           size="icon-xs"
           variant="ghost"
@@ -155,7 +143,7 @@ export function WatchlistCard({
         </Button>
       </div>
 
-      <div className="flex items-start gap-1.5 pr-20">
+      <div className="flex items-start gap-1.5 pr-14">
         <button
           type="button"
           className="mt-0.5 cursor-grab touch-none text-muted-foreground/60 hover:text-muted-foreground active:cursor-grabbing"
@@ -204,6 +192,22 @@ export function WatchlistCard({
           )}
         </Link>
       </div>
+
+      {/* 헤더 우측은 엔진·즐겨찾기 아이콘으로 차 있어 좁은 카드에서 이름과 겹친다 — 가격 줄 오른쪽 빈자리에 둔다 */}
+      <button
+        type="button"
+        onClick={() => onEditGrade(item.stock_id)}
+        aria-label={userGrade ? `등급 ${userGrade.grade}${userGrade.reason ? ` — ${userGrade.reason}` : ''}, 변경` : '등급 지정'}
+        title={userGrade ? (userGrade.reason ?? undefined) : '등급 지정'}
+        className={cn(
+          'absolute right-3 bottom-3 inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-bold ring-1',
+          userGrade
+            ? GRADE_TONE[userGrade.grade]
+            : 'font-medium text-muted-foreground/60 ring-border hover:bg-muted hover:text-muted-foreground',
+        )}
+      >
+        {userGrade?.grade ?? '등급'}
+      </button>
     </Card>
   );
 }
