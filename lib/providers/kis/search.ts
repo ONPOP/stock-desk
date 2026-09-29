@@ -29,7 +29,7 @@ export async function searchStocks(
   const q = sanitizeSearchQuery(rawQuery);
   const { data, error } = await db
     .from('stocks')
-    .select('ticker, name_kr, name_en, market, currency')
+    .select('id, ticker, name_kr, name_en, market, currency')
     .or(`ticker.ilike.${q}%,name_kr.ilike.%${q}%,name_en.ilike.%${q}%`)
     .limit(Math.min(Math.max(limit, 1), 50));
   if (error) {

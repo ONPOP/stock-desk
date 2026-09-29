@@ -1,11 +1,13 @@
 'use client';
 
-// 기간별 수익률 (V2) — 실현손익(computeRealized) 기반. 연도별(기본)/월별/기간 토글.
-// 누적 라인 + 기간별 바 + 종목별 도넛(recharts). 통화 혼합은 원화 환산(환율=시장지수 원/달러)으로 통합.
+// 수익 분석 (V2 → D21 투자 기록 탭) — 실현손익(computeRealized) 기반. 연도별(기본)/월별/기간 토글.
+// 기간별 바(+목표 수익선) + 누적 라인 + 종목별 막대. 통화 혼합은 원화 환산(환율=시장지수 원/달러)으로 통합.
+// 월·연 목표 달성 기록은 목표 탭이 담당하고, 여기서는 매매 품질 지표(승률·손익비·보유일·비용)를 본다.
 import { useMemo, useState } from 'react';
 import {
   BarChart,
   Bar,
+  ComposedChart,
   LineChart,
   Line,
   Cell,
@@ -41,7 +43,15 @@ const TOOLTIP_STYLE = {
   fontSize: 12,
 } as const;
 
-export function PerformanceView({ trades }: { trades: RealTrade[] }) {
+const DAY_MS = 86_400_000;
+
+export interface PerformanceViewProps {
+  trades: RealTrade[];
+  /** 목표 수익(₩) — 키는 월(YYYY-MM) 또는 연(YYYY). 목표 탭 설정이 있을 때 막대 위에 선으로 겹친다 */
+  targets?: Record<string, number>;
+}
+
+export function PerformanceView({ trades, targets = {} }: PerformanceViewProps) {
   const { usdKrw, ready } = useUsdKrw();
   const realized = useMemo(() => computeRealized(trades), [trades]);
 
@@ -51,6 +61,7 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
       realized.map((r) => ({
         ...r,
         krw: r.currency === 'USD' ? Math.round((r.realizedPnl / 100) * (ready ? usdKrw : 0)) : r.realizedPnl,
+        feeKrw: r.currency === 'USD' ? Math.round((r.fee / 100) * (ready ? usdKrw : 0)) : r.fee,
       })),
     [realized, ready, usdKrw],
   );
@@ -86,10 +97,11 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
     const list = sorted.map(([key, pnl]) => {
       cum += pnl;
       const label = mode === 'year' ? key : mode === 'month' ? key.slice(5) + '월' : key.slice(5);
-      return { key, label, pnl, cum };
+      return { key, label, pnl, cum, target: mode === 'range' ? undefined : targets[key] };
     });
     return { buckets: list, filtered: f };
-  }, [rows, mode, year, range]);
+  }, [rows, mode, year, range, targets]);
+  const hasTargets = buckets.some((b) => b.target != null);
 
   // 종목별 실현손익(가로 막대 — 이익·손실 모두, 기여도 큰 순)
   const byStock = useMemo(() => {
@@ -115,9 +127,21 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
   const summary = useMemo(() => {
     const total = filtered.reduce((acc, r) => acc + r.krw, 0);
     const count = filtered.length;
-    const wins = filtered.filter((r) => r.realizedPnl > 0).length;
-    const winRate = count > 0 ? Math.round((wins / count) * 100) : 0;
-    return { total, count, winRate };
+    const winList = filtered.filter((r) => r.realizedPnl > 0);
+    const lossList = filtered.filter((r) => r.realizedPnl < 0);
+    const winRate = count > 0 ? Math.round((winList.length / count) * 100) : 0;
+    // 손익비 = 평균 이익 ÷ 평균 손실(절댓값). 손실이 없으면 산출 불가
+    const avgWin = winList.length > 0 ? winList.reduce((a, r) => a + r.krw, 0) / winList.length : 0;
+    const avgLoss = lossList.length > 0 ? Math.abs(lossList.reduce((a, r) => a + r.krw, 0) / lossList.length) : 0;
+    const payoff = avgLoss > 0 && winList.length > 0 ? (avgWin / avgLoss).toFixed(2) : null;
+    // 평균 보유일 = 보유 구간 최초 매수일 → 매도일(같은 날 매도는 0일)
+    const held = filtered.filter((r) => r.buyDate);
+    const avgHoldDays =
+      held.length > 0
+        ? (held.reduce((a, r) => a + (Date.parse(r.tradeDate) - Date.parse(r.buyDate)) / DAY_MS, 0) / held.length).toFixed(1)
+        : null;
+    const fees = filtered.reduce((a, r) => a + r.feeKrw, 0);
+    return { total, count, winRate, payoff, avgHoldDays, fees };
   }, [filtered]);
 
   return (
@@ -183,12 +207,12 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
 
       {realized.length === 0 ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
-          매도 기록이 없습니다. 종목 상세의 매매일지에서 매도를 기록하면 실현손익이 집계됩니다.
+          매도 기록이 없습니다. [매매] 탭이나 종목 상세의 매매일지에서 매도를 기록하면 실현손익이 집계됩니다.
         </Card>
       ) : (
         <>
           {/* 요약 */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
             <Card className="gap-1 p-4">
               <span className="text-[11px] text-muted-foreground">실현손익(₩환산)</span>
               <span className={`text-xl font-bold tabular-nums ${pnlColor(summary.total)}`}>{signedKrw(summary.total)}</span>
@@ -201,25 +225,51 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
               <span className="text-[11px] text-muted-foreground">승률</span>
               <span className="text-xl font-bold tabular-nums">{summary.winRate}%</span>
             </Card>
+            <Card className="gap-1 p-4">
+              <span className="text-[11px] text-muted-foreground">손익비 (평균 이익÷손실)</span>
+              <span className="text-xl font-bold tabular-nums">{summary.payoff ?? '—'}</span>
+            </Card>
+            <Card className="gap-1 p-4">
+              <span className="text-[11px] text-muted-foreground">평균 보유일</span>
+              <span className="text-xl font-bold tabular-nums">{summary.avgHoldDays != null ? `${summary.avgHoldDays}일` : '—'}</span>
+            </Card>
+            <Card className="gap-1 p-4">
+              <span className="text-[11px] text-muted-foreground">매매비용 합계(₩환산)</span>
+              <span className="text-xl font-bold tabular-nums">{formatMoney(summary.fees, 'KRW')}</span>
+            </Card>
           </div>
 
           {/* 기간별 바 + 누적 라인 */}
           <div className="grid gap-5 lg:grid-cols-2">
             <Card className="gap-3 p-4">
-              <h3 className="text-sm font-semibold">{mode === 'year' ? '연도별' : '월별/일별'} 실현손익</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">{mode === 'year' ? '연도별' : mode === 'month' ? '월별' : '일별'} 실현손익</h3>
+                {hasTargets && (
+                  <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className="h-0.5 w-4 rounded bg-amber-500" aria-hidden /> 목표 수익
+                  </span>
+                )}
+              </div>
               <div className="h-60 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={buckets} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                  <ComposedChart data={buckets} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                     <YAxis tickFormatter={(v) => formatCompactMoney(Number(v), 'KRW')} tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={64} />
-                    <Tooltip formatter={(v) => signedKrw(Number(v) || 0)} contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'var(--muted)' }} />
+                    <Tooltip
+                      formatter={(v, name) => [signedKrw(Number(v) || 0), name === 'target' ? '목표 수익' : '실현손익']}
+                      contentStyle={TOOLTIP_STYLE}
+                      cursor={{ fill: 'var(--muted)' }}
+                    />
                     <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
                       {buckets.map((b) => (
                         <Cell key={b.key} fill={b.pnl >= 0 ? UP : DOWN} />
                       ))}
                     </Bar>
-                  </BarChart>
+                    {hasTargets && (
+                      <Line type="stepAfter" dataKey="target" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 2.5 }} connectNulls />
+                    )}
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </Card>
@@ -287,13 +337,14 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
               <p className="py-8 text-center text-sm text-muted-foreground">해당 기간에 매도 기록이 없습니다.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-sm">
+                <table className="w-full min-w-[780px] text-sm">
                   <thead>
                     <tr className="border-b text-xs text-muted-foreground">
                       <th className="py-2 pr-3 text-left font-medium">종목명</th>
                       <th className="px-3 py-2 text-right font-medium">매수 단가</th>
                       <th className="px-3 py-2 text-right font-medium">매수량</th>
                       <th className="px-3 py-2 text-right font-medium">판매 단가</th>
+                      <th className="px-3 py-2 text-right font-medium">실현손익</th>
                       <th className="px-3 py-2 text-right font-medium">수익률</th>
                       <th className="px-3 py-2 text-left font-medium">매수일</th>
                       <th className="py-2 pl-3 text-left font-medium">실현일</th>
@@ -306,6 +357,10 @@ export function PerformanceView({ trades }: { trades: RealTrade[] }) {
                         <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(r.avgBuyPrice, r.currency)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums">{r.qty.toLocaleString()}주</td>
                         <td className="px-3 py-2.5 text-right tabular-nums">{formatMoney(r.sellPrice, r.currency)}</td>
+                        <td className={`px-3 py-2.5 text-right tabular-nums ${pnlColor(r.realizedPnl)}`}>
+                          {r.realizedPnl > 0 ? '+' : ''}
+                          {formatMoney(r.realizedPnl, r.currency)}
+                        </td>
                         <td className={`px-3 py-2.5 text-right font-medium tabular-nums ${pnlColor(r.realizedRate)}`}>
                           {r.realizedRate > 0 ? '+' : ''}
                           {r.realizedRate.toFixed(2)}%

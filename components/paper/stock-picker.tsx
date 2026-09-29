@@ -7,12 +7,17 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { CompanyLogo } from '@/components/ui/company-logo';
-import type { Market, StockSearchResult } from '@/types';
+import type { Currency, Market, StockSearchResult } from '@/types';
 
 export interface SelectedStock {
   ticker: string;
   market: Market;
   name: string;
+  /** 검색 결과의 stocks.id·통화(투자 기록 매매 탭이 사용) */
+  id?: string;
+  currency?: Currency;
+  nameKr?: string | null;
+  nameEn?: string | null;
 }
 
 export function StockPicker({
@@ -102,7 +107,15 @@ export function StockPicker({
               key={`${r.ticker}:${r.market}`}
               type="button"
               onClick={() => {
-                onSelect({ ticker: r.ticker, market: r.market, name: r.name_kr ?? r.name_en ?? r.ticker });
+                onSelect({
+                  ticker: r.ticker,
+                  market: r.market,
+                  name: r.name_kr ?? r.name_en ?? r.ticker,
+                  id: r.id,
+                  currency: r.currency,
+                  nameKr: r.name_kr,
+                  nameEn: r.name_en,
+                });
                 setQuery('');
                 setOpen(false);
                 setResults([]);

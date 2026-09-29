@@ -2,7 +2,8 @@
 
 // 주식 잔고 및 매매일지 (V2) — 실거래 매수/매도 입력 → 보유현황·평가손익·실현손익. 매매내역 삭제.
 // 현재가는 종목 상세의 useQuote 결과(prop)를 재사용(중복 폴링 회피).
-import { useMemo, useState } from 'react';
+// 종목 상세와 투자 기록 [매매] 탭이 같은 패널·같은 real_trades를 쓰므로 양쪽 기록이 항상 일치한다.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Decimal from 'decimal.js';
 import { toast } from 'sonner';
 import { Plus, Trash2 } from 'lucide-react';
@@ -11,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { formatMoney } from '@/lib/utils/money';
+import { formatMoney, formatFromMinorUnits } from '@/lib/utils/money';
 import { computeHoldings, computeRealized, evalHolding } from '@/lib/utils/portfolio';
 import type { RealTrade, Stock } from '@/types';
 
@@ -41,10 +42,24 @@ export interface HoldingsTradesPanelProps {
   stock: Stock;
   initialTrades: RealTrade[];
   currentPriceMinor: number | null;
+  /** 매매 추가·삭제 후 이 종목의 전체 기록을 알린다(투자 기록 탭의 전체 보유·내역 갱신용) */
+  onTradesChange?: (stockId: string, trades: RealTrade[]) => void;
 }
 
-export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }: HoldingsTradesPanelProps) {
+export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor, onTradesChange }: HoldingsTradesPanelProps) {
   const [trades, setTrades] = useState<RealTrade[]>(initialTrades);
+  const onChangeRef = useRef(onTradesChange);
+  useEffect(() => {
+    onChangeRef.current = onTradesChange;
+  });
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    onChangeRef.current?.(stock.id, trades);
+  }, [trades, stock.id]);
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [qty, setQty] = useState('');
@@ -188,9 +203,20 @@ export function HoldingsTradesPanel({ stock, initialTrades, currentPriceMinor }:
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="t-price">
-              {side === 'buy' ? '매수' : '매도'} 단가 ({unit})
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="t-price">
+                {side === 'buy' ? '매수' : '매도'} 단가 ({unit})
+              </Label>
+              {currentPriceMinor != null && (
+                <button
+                  type="button"
+                  onClick={() => setPrice(formatFromMinorUnits(currentPriceMinor, cur))}
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  현재가
+                </button>
+              )}
+            </div>
             <Input
               id="t-price"
               inputMode="decimal"
