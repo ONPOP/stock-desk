@@ -385,7 +385,13 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">이 탭에 등록된 종목이 없습니다. 위에서 검색해 추가하세요.</p>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          // id 고정 — 없으면 dnd-kit이 전역 카운터로 aria-describedby를 매겨 SSR과 hydration 값이 어긋난다
+          id="watchlist-dnd"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
           {buckets.favorites.length > 0 && (
             <section className="space-y-3">
               <div className="flex items-center gap-2">
