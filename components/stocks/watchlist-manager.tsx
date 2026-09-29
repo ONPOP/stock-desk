@@ -25,7 +25,15 @@ import { WatchlistDialog, type DialogMode } from './watchlist-dialog';
 import { PortfolioSummaryBar, type AllocationSlice } from './portfolio-summary-bar';
 import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
 import { computeHoldings, computeRealized, evalHolding, summarizePortfolio } from '@/lib/utils/portfolio';
-import type { Market, RealHolding, RealTrade, StockSearchResult, WatchlistItem, WatchlistTab } from '@/types';
+import type {
+  Market,
+  RealHolding,
+  RealTrade,
+  StockSearchResult,
+  UserStockGrade,
+  WatchlistItem,
+  WatchlistTab,
+} from '@/types';
 
 // 즐겨찾기 → 거래소 고정 순서(SYSTEM_STATE 명세)
 const MARKET_ORDER: Market[] = ['KOSPI', 'NASDAQ', 'KOSDAQ', 'NYSE', 'AMEX'];
@@ -47,6 +55,8 @@ interface WatchlistManagerProps {
   activeId: string;
   initial: WatchlistItem[];
   trades: RealTrade[];
+  /** 종목 단위 사용자 등급(D22) — 탭과 무관, stock_id 키 */
+  grades: Record<string, UserStockGrade>;
 }
 
 export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId, initial, trades }: WatchlistManagerProps) {
