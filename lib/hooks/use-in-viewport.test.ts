@@ -169,4 +169,15 @@ describe('useInViewport', () => {
 
     expect(seen.at(-1)).toBe(true);
   });
+
+  it('IntersectionObserver 유무와 무관하게 첫 렌더는 false다 (SSR과 hydration 첫 렌더 일치)', () => {
+    // 서버에는 IntersectionObserver가 없다 — 첫 렌더 값이 환경에 따라 달라지면 hydration 불일치가 난다
+    (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = undefined;
+
+    const seen: boolean[] = [];
+    render(createElement(Probe, { onRender: (v) => seen.push(v) }));
+
+    expect(seen[0]).toBe(false);
+    expect(seen.at(-1)).toBe(true); // 폴백은 마운트 후(effect)에 켜진다
+  });
 });

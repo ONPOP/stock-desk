@@ -64,12 +64,15 @@ export function useInViewport<T extends Element>(
 ): [ref: RefObject<T | null>, visible: boolean] {
   const rootMargin = opts?.rootMargin ?? DEFAULT_ROOT_MARGIN;
   const ref = useRef<T | null>(null);
-  // IntersectionObserver가 없는 환경(구형·테스트)에서는 폴링이 영영 안 켜지는 것보다 나으므로
-  // true로 떨어진다. 있으면 관측 콜백이 오기 전까지는 false를 유지한다.
-  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  // 첫 값은 환경과 무관하게 false — 서버(IntersectionObserver 없음)와 hydration 첫 렌더가 같아야 한다.
+  // 없는 환경(구형·테스트)에서는 폴링이 영영 안 켜지는 것보다 나으므로 마운트 후 true로 떨어진다.
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
 

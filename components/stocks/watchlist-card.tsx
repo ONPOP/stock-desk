@@ -62,7 +62,7 @@ export function WatchlistCard({
   onEditGrade,
 }: WatchlistCardProps) {
   const [viewportRef, visible] = useInViewport<HTMLDivElement>();
-  const { quote, error, loading } = useQuote(item.ticker, item.market, { enabled: visible });
+  const { quote, error } = useQuote(item.ticker, item.market, { enabled: visible });
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sortId });
 
   // dnd-kit의 정렬용 ref와 가시성 관측용 ref를 같은 루트 엘리먼트에 함께 건다.
@@ -122,7 +122,8 @@ export function WatchlistCard({
           </div>
 
           <div className="mt-3">
-            {loading && !quote ? (
+            {/* 화면 밖(폴링 전)도 로딩으로 본다 — loading 기준이면 SSR(Skeleton)과 첫 렌더(빈칸)가 달라진다 */}
+            {!quote && !error ? (
               <Skeleton className="h-7 w-28" />
             ) : error ? (
               <p className="text-sm text-muted-foreground">시세 불러오기 실패</p>

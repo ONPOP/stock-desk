@@ -481,7 +481,13 @@ export function WatchlistManager({
           </button>
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          // id 고정 — 없으면 dnd-kit이 전역 카운터로 aria-describedby를 매겨 SSR과 hydration 값이 어긋난다
+          id="watchlist-dnd"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
           {buckets.favorites.length > 0 && (
             <section className="space-y-3">
               <div className="flex items-center gap-2">
