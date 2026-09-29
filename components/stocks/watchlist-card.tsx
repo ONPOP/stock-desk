@@ -16,7 +16,9 @@ import { useQuote } from '@/lib/hooks/use-quote';
 import { useInViewport } from '@/lib/hooks/use-in-viewport';
 import { formatMoney } from '@/lib/utils/money';
 import { evalHolding } from '@/lib/utils/portfolio';
-import type { RealHolding, WatchlistItem } from '@/types';
+import { cn } from '@/lib/utils';
+import type { RealHolding, UserStockGrade, WatchlistItem } from '@/types';
+import { GRADE_TONE } from './grade-style';
 
 interface WatchlistCardProps {
   /** dnd 정렬용 유일 id — 묶음 접두어로 즐겨찾기/시장 중복 표시를 구분(`fav:<stockId>` 등) */
@@ -28,6 +30,9 @@ interface WatchlistCardProps {
   /** 분석 엔진(D16) 플래그 토글 — 항상 브리핑 / 관찰 고정 */
   onToggleEngineFlag: (stockId: string, flag: 'always_brief' | 'radar_pin', value: boolean) => void;
   onPrice: (stockId: string, priceMinor: number) => void;
+  /** 사용자 등급(D22) — 없으면 미분류 */
+  userGrade: UserStockGrade | null;
+  onEditGrade: (stockId: string) => void;
 }
 
 function changeColor(change: number): string {
@@ -53,6 +58,8 @@ export function WatchlistCard({
   onToggleFavorite,
   onToggleEngineFlag,
   onPrice,
+  userGrade,
+  onEditGrade,
 }: WatchlistCardProps) {
   const [viewportRef, visible] = useInViewport<HTMLDivElement>();
   const { quote, error, loading } = useQuote(item.ticker, item.market, { enabled: visible });
@@ -93,6 +100,18 @@ export function WatchlistCard({
       className="relative gap-0 p-4 ring-border/70 transition-shadow hover:shadow-md"
     >
       <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => onEditGrade(item.stock_id)}
+          aria-label={userGrade ? `등급 ${userGrade.grade}, 변경` : '등급 지정'}
+          title={userGrade ? (userGrade.reason ?? undefined) : '등급 지정'}
+          className={cn(
+            'mr-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[11px] font-bold ring-1',
+            userGrade ? GRADE_TONE[userGrade.grade] : 'text-muted-foreground/50 ring-border hover:bg-muted',
+          )}
+        >
+          {userGrade?.grade ?? '–'}
+        </button>
         <Button
           size="icon-xs"
           variant="ghost"
@@ -136,7 +155,7 @@ export function WatchlistCard({
         </Button>
       </div>
 
-      <div className="flex items-start gap-1.5 pr-14">
+      <div className="flex items-start gap-1.5 pr-20">
         <button
           type="button"
           className="mt-0.5 cursor-grab touch-none text-muted-foreground/60 hover:text-muted-foreground active:cursor-grabbing"

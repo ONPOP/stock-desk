@@ -23,12 +23,17 @@ import { WatchlistCard } from './watchlist-card';
 import { WatchlistTabs } from './watchlist-tabs';
 import { WatchlistDialog, type DialogMode } from './watchlist-dialog';
 import { PortfolioSummaryBar, type AllocationSlice } from './portfolio-summary-bar';
+import { GradeFilterChips } from './grade-filter-chips';
+import { StockGradeDialog, type GradeTarget } from './stock-grade-dialog';
 import { useUsdKrw } from '@/lib/hooks/use-usd-krw';
 import { computeHoldings, computeRealized, evalHolding, summarizePortfolio } from '@/lib/utils/portfolio';
+import { countByGrade, filterByGrade, toggleGradeFilter } from '@/lib/utils/stock-grade';
 import type {
+  GradeFilter,
   Market,
   RealHolding,
   RealTrade,
+  StockGrade,
   StockSearchResult,
   UserStockGrade,
   WatchlistItem,
@@ -59,7 +64,13 @@ interface WatchlistManagerProps {
   grades: Record<string, UserStockGrade>;
 }
 
-export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId, initial, trades }: WatchlistManagerProps) {
+export function WatchlistManager({
+  tabs: initialTabs,
+  activeId: initialActiveId,
+  initial,
+  trades,
+  grades: initialGrades,
+}: WatchlistManagerProps) {
   const [tabs, setTabs] = useState<WatchlistTab[]>(initialTabs);
   // 뒤로가기로 돌아오면 서버 props가 아니라 URL이 진짜 상태다 — 라우터 캐시가 이전 payload를 그대로
   // 되돌려줘도(=activeId prop이 기본 탭) 주소의 ?w= 를 우선해 보던 탭을 복원한다.
@@ -71,6 +82,10 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
   const [itemsByTab, setItemsByTab] = useState<Record<string, WatchlistItem[]>>({ [initialActiveId]: initial });
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
   const [dialog, setDialog] = useState<DialogMode | null>(null);
+  // 등급은 종목 단위라 탭 캐시(itemsByTab)와 분리 보관 — 한 탭에서 바꾸면 모든 탭 카드에 즉시 반영된다.
+  const [grades, setGrades] = useState<Record<string, UserStockGrade>>(initialGrades);
+  const [gradeFilter, setGradeFilter] = useState<Set<GradeFilter>>(new Set());
+  const [gradeTarget, setGradeTarget] = useState<GradeTarget | null>(null);
   const fetchingRef = useRef<Set<string>>(new Set());
   const { usdKrw, ready } = useUsdKrw();
 
@@ -78,6 +93,8 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
 
   const items = useMemo(() => itemsByTab[activeId] ?? [], [itemsByTab, activeId]);
   const tabLoaded = activeId in itemsByTab;
+  const gradeCounts = useMemo(() => countByGrade(items, grades), [items, grades]);
+  const visibleItems = useMemo(() => filterByGrade(items, grades, gradeFilter), [items, grades, gradeFilter]);
 
   const holdings = useMemo(() => computeHoldings(trades), [trades]);
   const realized = useMemo(() => computeRealized(trades), [trades]);
@@ -223,6 +240,51 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
     }
   }
 
+  function openGradeDialog(stockId: string) {
+    const it = items.find((i) => i.stock_id === stockId);
+    if (!it) return;
+    setGradeTarget({ stockId, name: it.name_kr ?? it.ticker, current: grades[stockId] ?? null });
+  }
+
+  /** 실패 시 throw — 모달이 닫히지 않고 남아 재시도할 수 있다 */
+  async function saveGrade(stockId: string, grade: StockGrade, reason: string | null) {
+    const snapshot = grades;
+    setGrades((m) => ({ ...m, [stockId]: { stockId, grade, reason, gradedAt: new Date().toISOString() } }));
+    try {
+      const res = await fetch('/api/stock-grades', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock_id: stockId, grade, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '등급 저장에 실패했습니다.');
+      setGrades((m) => ({ ...m, [stockId]: data.grade as UserStockGrade }));
+      toast.success(`${grade}등급으로 지정했습니다.`);
+    } catch (e) {
+      setGrades(snapshot);
+      toast.error((e as Error).message);
+      throw e;
+    }
+  }
+
+  async function clearGrade(stockId: string) {
+    const snapshot = grades;
+    setGrades((m) => {
+      const n = { ...m };
+      delete n[stockId];
+      return n;
+    });
+    try {
+      const res = await fetch(`/api/stock-grades?stock_id=${encodeURIComponent(stockId)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('등급을 해제했습니다.');
+    } catch (e) {
+      setGrades(snapshot);
+      toast.error('등급 해제에 실패했습니다.');
+      throw e;
+    }
+  }
+
   async function persistReorder(orderedStockIds: string[]) {
     const targetId = activeId;
     try {
@@ -305,17 +367,22 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
   const buckets = useMemo(() => {
     const bySort = (a: WatchlistItem, b: WatchlistItem) =>
       a.sortOrder - b.sortOrder || a.ticker.localeCompare(b.ticker);
-    const favorites = items.filter((i) => i.isFavorite).sort(bySort);
+    const favorites = visibleItems.filter((i) => i.isFavorite).sort(bySort);
     const byMarket = MARKET_ORDER.map((mkt) => ({
       market: mkt,
-      list: items.filter((i) => i.market === mkt).sort(bySort),
+      list: visibleItems.filter((i) => i.market === mkt).sort(bySort),
     })).filter((g) => g.list.length > 0);
     return { favorites, byMarket };
-  }, [items]);
+  }, [visibleItems]);
 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
+    // 걸러진 일부만 0..n으로 저장하면 숨은 종목과 sort_order가 겹친다 — 필터 중에는 정렬하지 않는다
+    if (gradeFilter.size > 0) {
+      toast.info('등급 필터를 해제한 뒤 순서를 바꿀 수 있습니다.');
+      return;
+    }
     const a = parseSid(String(active.id));
     const o = parseSid(String(over.id));
     if (a.bucket !== o.bucket) return; // 다른 묶음 간 이동 금지
@@ -366,6 +433,8 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
               onToggleFavorite={handleToggleFavorite}
               onToggleEngineFlag={handleToggleEngineFlag}
               onPrice={handlePrice}
+              userGrade={grades[it.stock_id] ?? null}
+              onEditGrade={openGradeDialog}
             />
           ))}
         </div>
@@ -386,6 +455,15 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
 
       <StockSearch existingKeys={existingKeys} onAdd={handleAdd} />
 
+      {tabLoaded && items.length > 0 && (
+        <GradeFilterChips
+          selected={gradeFilter}
+          counts={gradeCounts}
+          onToggle={(f) => setGradeFilter((s) => toggleGradeFilter(s, f))}
+          onClear={() => setGradeFilter(new Set())}
+        />
+      )}
+
       {!tabLoaded ? (
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -394,6 +472,13 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">이 탭에 등록된 종목이 없습니다. 위에서 검색해 추가하세요.</p>
+      ) : visibleItems.length === 0 ? (
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <span>선택한 등급의 종목이 없습니다.</span>
+          <button type="button" className="underline" onClick={() => setGradeFilter(new Set())}>
+            전체 보기
+          </button>
+        </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           {buckets.favorites.length > 0 && (
@@ -422,6 +507,12 @@ export function WatchlistManager({ tabs: initialTabs, activeId: initialActiveId,
       {holdings.length > 0 && <PortfolioSummaryBar summary={summary} allocation={allocation} ready={ready} />}
 
       <WatchlistDialog mode={dialog} onClose={() => setDialog(null)} onSaveName={handleSaveName} onDelete={deleteTab} />
+      <StockGradeDialog
+        target={gradeTarget}
+        onClose={() => setGradeTarget(null)}
+        onSave={saveGrade}
+        onClear={clearGrade}
+      />
     </div>
   );
 }
