@@ -139,7 +139,8 @@ export function TradePanel({ initialTrades }: { initialTrades: RealTrade[] }) {
         <PricePoller key={h.stockId} stockId={h.stockId} ticker={h.ticker} market={h.market} onPrice={handlePrice} />
       ))}
 
-      <Card className="gap-4 p-4">
+      {/* 검색 드롭다운이 카드 밖으로 펼쳐지므로 Card 기본 overflow-hidden을 해제 */}
+      <Card className="gap-4 overflow-visible p-4">
         <div>
           <h3 className="font-semibold">매수·매도 기록</h3>
           <p className="text-[11px] text-muted-foreground">
